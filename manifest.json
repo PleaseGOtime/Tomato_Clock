@@ -1,0 +1,27 @@
+{
+  "name": "番茄钟 - 正向计时",
+  "short_name": "番茄钟",
+  "description": "正向计时器，记录你的每一刻专注",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFBF5",
+  "theme_color": "#E53935",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icons/tomato.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "icons/tomato.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "icons/tomato.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

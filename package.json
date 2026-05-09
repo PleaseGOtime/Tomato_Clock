@@ -1,0 +1,9 @@
+{
+  "name": "tomato-clock",
+  "version": "1.0.0",
+  "private": true,
+  "description": "番茄钟 - 正向计时 PWA 应用",
+  "scripts": {
+    "deploy": "rsync -avz --delete ./ user@your-server:/var/www/tomato-clock/"
+  }
+}

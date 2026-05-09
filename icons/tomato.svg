@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bodyGrad" cx="40%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#FF6F61"/>
+      <stop offset="60%" stop-color="#E53935"/>
+      <stop offset="100%" stop-color="#B71C1C"/>
+    </radialGradient>
+  </defs>
+  <!-- Tomato body -->
+  <ellipse cx="256" cy="290" rx="170" ry="160" fill="url(#bodyGrad)"/>
+  <!-- Highlight -->
+  <ellipse cx="210" cy="240" rx="50" ry="30" fill="rgba(255,255,255,0.15)" transform="rotate(-20,210,240)"/>
+  <!-- Stem -->
+  <path d="M256 140 C240 110 200 80 170 50 C185 60 210 75 240 85 C225 55 215 30 220 10 C230 35 245 65 256 90 C267 65 282 35 292 10 C297 30 287 55 272 85 C302 75 327 60 342 50 C312 80 272 110 256 140Z" fill="#4CAF50"/>
+  <!-- Leaf -->
+  <path d="M256 140 C280 155 310 165 340 160 C320 170 290 172 265 165 C260 162 258 150 256 140Z" fill="#388E3C"/>
+  <!-- Bottom dimple -->
+  <ellipse cx="256" cy="430" rx="20" ry="8" fill="rgba(0,0,0,0.1)"/>
+</svg>

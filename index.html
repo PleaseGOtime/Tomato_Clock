@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#E53935">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="番茄钟">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/tomato.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/tomato.svg">
+  <title>番茄钟 - 专注计时</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: #E53935; --primary-light: #FF6F61; --primary-dark: #B71C1C;
+      --bg: #FFFBF5; --surface: #FFFFFF; --text: #2C2C2C; --text2: #999;
+      --border: #F0EDE8; --success: #4CAF50;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+      background: var(--bg); color: var(--text); display: flex; flex-direction: column; font-size: 16px;
+      -webkit-tap-highlight-color: transparent; user-select: none;
+    }
+    /* Header */
+    header {
+      background: var(--primary); color: #fff; padding: 10px 20px;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      flex-shrink: 0; position: relative; z-index: 10;
+    }
+    header img { width: 20px; height: 20px; }
+    header h1 { font-size: 16px; font-weight: 600; letter-spacing: 1px; }
+    /* Main */
+    main { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px; padding-bottom: calc(52px + var(--safe-bottom)); }
+    .tab-content { display: none; flex-direction: column; gap: 12px; }
+    .tab-content.active { display: flex; }
+    /* Tab bar - fixed bottom */
+    .tab-bar {
+      display: flex; background: var(--surface); border-top: 1px solid var(--border);
+      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+      width: 100%; z-index: 100; padding-bottom: var(--safe-bottom);
+    }
+    .tab-btn {
+      flex: 1; padding: 8px 0; border: none; background: none; font-size: 13px;
+      color: var(--text2); cursor: pointer; transition: color .2s;
+      position: relative; -webkit-tap-highlight-color: transparent;
+    }
+    .tab-btn::after {
+      content: ''; position: absolute; bottom: 0; left: 20%; right: 20%; height: 3px;
+      background: var(--primary); border-radius: 3px 3px 0 0; transform: scaleX(0); transition: transform .2s;
+    }
+    .tab-btn.active { color: var(--primary); font-weight: 600; }
+    .tab-btn.active::after { transform: scaleX(1); }
+    /* Card */
+    .card {
+      background: var(--surface); border-radius: 12px; padding: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .card-title { font-size: 13px; color: var(--text2); margin-bottom: 6px; font-weight: 500; }
+
+    /* ===== Mode Toggle ===== */
+    .mode-toggle {
+      display: flex; background: #F5F3F0; border-radius: 10px; padding: 3px;
+    }
+    .mode-btn {
+      flex: 1; border: none; background: none; padding: 8px; border-radius: 8px;
+      font-size: 14px; font-weight: 500; color: var(--text2); cursor: pointer; transition: all .2s;
+    }
+    .mode-btn.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+    .timer-mode { display: none; }
+    .timer-mode.active { display: flex; flex-direction: column; gap: 12px; }
+
+    /* ===== Count-up Timer ===== */
+    .timer-up-display { text-align: center; padding: 12px 0 8px; }
+    .timer-up-display .time {
+      font-size: 56px; font-weight: 700; font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+      letter-spacing: 3px; line-height: 1.1; color: var(--text);
+    }
+    .timer-up-display .status-label {
+      display: inline-block; margin-top: 4px; font-size: 12px; color: var(--text2);
+      background: #F5F5F5; padding: 2px 12px; border-radius: 10px;
+    }
+    .timer-controls {
+      display: flex; gap: 10px; justify-content: center; padding: 4px 0 8px; flex-wrap: wrap;
+    }
+    .timer-controls button {
+      border: none; padding: 10px 22px; border-radius: 20px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: opacity .15s; -webkit-tap-highlight-color: transparent;
+    }
+    .timer-controls button:active { opacity: .7; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-secondary { background: #F0EDE8; color: var(--text); }
+    .btn-danger { background: #FFF0F0; color: var(--primary); }
+    .timer-up-activity { display: none; }
+    .timer-up-activity.visible { display: block; }
+    .timer-up-activity textarea {
+      width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+      font-size: 13px; font-family: inherit; resize: none; min-height: 48px; outline: none;
+      background: var(--surface); user-select: text;
+    }
+    .timer-up-activity textarea:focus { border-color: var(--primary); }
+
+    /* ===== Count-down Knob ===== */
+    .knob-section { text-align: center; }
+    .knob-container {
+      position: relative; width: 220px; height: 220px; margin: 0 auto; touch-action: none;
+      cursor: pointer;
+    }
+    .knob-svg { width: 100%; height: 100%; display: block; }
+    #knob-arc { transition: stroke-dashoffset .08s ease-out; }
+    .knob-center {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      text-align: center; pointer-events: none;
+    }
+    .knob-time {
+      font-size: 42px; font-weight: 700; font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+      color: var(--text); line-height: 1; pointer-events: none;
+    }
+    .knob-time.editable { cursor: pointer; pointer-events: auto; }
+    .knob-edit {
+      display: none; align-items: center; justify-content: center; gap: 4px;
+    }
+    .knob-edit input {
+      width: 64px; padding: 4px 8px; border: 2px solid var(--primary); border-radius: 8px;
+      font-size: 28px; font-weight: 700; text-align: center; font-family: inherit;
+      outline: none; -moz-appearance: textfield; pointer-events: auto;
+    }
+    .knob-edit input::-webkit-outer-spin-button,
+    .knob-edit input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .knob-edit .unit { font-size: 14px; color: var(--text2); }
+    .knob-label {
+      font-size: 12px; color: var(--text2); margin-top: 4px;
+    }
+    .knob-status {
+      display: inline-block; margin-top: 4px; font-size: 12px; color: var(--text2);
+      background: #F5F5F5; padding: 2px 12px; border-radius: 10px;
+    }
+    .knob-status.finished { background: var(--primary); color: #fff; }
+    /* Presets */
+    .preset-btns {
+      display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;
+    }
+    .preset-btn {
+      border: 1px solid var(--border); background: var(--surface); padding: 6px 14px;
+      border-radius: 16px; font-size: 13px; color: var(--text2); cursor: pointer;
+      transition: all .15s;
+    }
+    .preset-btn:active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .preset-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .cd-controls { display: flex; gap: 10px; justify-content: center; padding: 4px 0; }
+    .cd-controls button {
+      border: none; padding: 10px 28px; border-radius: 20px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: opacity .15s;
+    }
+    .cd-controls button:active { opacity: .7; }
+    .cd-controls button:disabled { opacity: .4; cursor: default; }
+
+    /* ===== Stats ===== */
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat-card {
+      background: var(--surface); border-radius: 10px; padding: 14px; text-align: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .stat-value { font-size: 28px; font-weight: 700; color: var(--primary); }
+    .stat-label { font-size: 12px; color: var(--text2); margin-top: 2px; }
+    .records-list { display: flex; flex-direction: column; gap: 6px; }
+    .record-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px; background: var(--surface); border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    }
+    .record-item .left { flex: 1; min-width: 0; }
+    .record-item .time { font-size: 11px; color: var(--text2); }
+    .record-item .activity-text { font-size: 13px; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .record-item .duration { font-size: 13px; font-weight: 600; color: var(--primary); white-space: nowrap; margin-left: 8px; }
+    .empty-state { text-align: center; padding: 24px 16px; color: var(--text2); font-size: 13px; }
+    .card-header { display: flex; align-items: center; justify-content: space-between; }
+
+    /* ===== Todos (shared by today & tomorrow) ===== */
+    .todo-section { display: flex; flex-direction: column; gap: 10px; }
+    .todo-date { font-size: 14px; font-weight: 600; color: var(--text); }
+    .todo-input-wrap { display: flex; gap: 8px; }
+    .todo-input-wrap input {
+      flex: 1; border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px;
+      font-size: 14px; font-family: inherit; outline: none; background: var(--surface); user-select: text;
+    }
+    .todo-input-wrap input:focus { border-color: var(--primary); }
+    .todo-input-wrap button {
+      border: none; background: var(--primary); color: #fff; padding: 9px 16px;
+      border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    }
+    .todo-list { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+    .todo-item {
+      display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border);
+    }
+    .todo-item .checkbox {
+      width: 20px; height: 20px; border: 2px solid var(--border); border-radius: 5px;
+      flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all .2s;
+    }
+    .todo-item .checkbox.done { background: var(--success); border-color: var(--success); }
+    .todo-item .checkbox.done::after { content: '✓'; color: #fff; font-size: 12px; font-weight: 700; }
+    .todo-item .todo-text { flex: 1; font-size: 14px; }
+    .todo-item .todo-text.done { text-decoration: line-through; color: var(--text2); }
+    .todo-item .delete-btn {
+      border: none; background: none; color: var(--text2); font-size: 16px;
+      cursor: pointer; padding: 2px 4px; line-height: 1;
+    }
+    .journal-section { display: flex; flex-direction: column; gap: 6px; }
+    .journal-section label { font-size: 13px; color: var(--text2); font-weight: 500; }
+    .journal-section textarea {
+      width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+      font-size: 13px; font-family: inherit; min-height: 80px; resize: vertical; outline: none;
+      background: var(--surface); user-select: text;
+    }
+    .journal-section textarea:focus { border-color: var(--primary); }
+
+    /* ===== Calendar ===== */
+    .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .cal-nav button { border: none; background: none; font-size: 22px; color: var(--text); cursor: pointer; padding: 4px 12px; line-height: 1; }
+    .cal-nav span { font-size: 16px; font-weight: 600; }
+    .cal-weekday { display: grid; grid-template-columns: repeat(7,1fr); text-align: center; font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; }
+    .cal-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 14px; border-radius: 8px; cursor: pointer; position: relative; }
+    .cal-day.empty { cursor: default; }
+    .cal-day.today { font-weight: 700; color: var(--primary); }
+    .cal-day.selected { background: var(--primary); color: #fff; font-weight: 600; }
+    .cal-day.has-record::after { content: ''; position: absolute; bottom: 3px; width: 4px; height: 4px; border-radius: 50%; background: var(--primary); }
+    .cal-day.selected.has-record::after { background: #fff; }
+    .cal-day:not(.empty):not(.selected):active { background: var(--border); }
+    #cal-detail { display: flex; flex-direction: column; gap: 8px; }
+    #cal-detail .cal-date { font-size: 15px; font-weight: 600; }
+    #cal-detail .cal-summary { font-size: 12px; color: var(--text2); }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: calc(68px + var(--safe-bottom)); left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(44,44,44,.9); color: #fff; padding: 8px 18px; border-radius: 8px;
+      font-size: 13px; opacity: 0; transition: all .3s; pointer-events: none; z-index: 100;
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* Scrollbar */
+    main::-webkit-scrollbar { width: 4px; }
+    main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Responsive */
+    @media (min-width: 520px) {
+      body { max-width: 480px; margin: 0 auto; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+      .tab-bar { max-width: 480px; }
+      .knob-container { width: 240px; height: 240px; }
+      .knob-time { font-size: 46px; }
+    }
+    @media (min-width: 768px) {
+      body { max-width: 520px; margin: 20px auto; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.08); }
+      .tab-bar { max-width: 520px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="icons/tomato.svg" alt="" width="20" height="20">
+    <h1>番茄钟</h1>
+  </header>
+
+  <main>
+    <!-- ===== Tab: 计时 ===== -->
+    <section id="tab-timer" class="tab-content active">
+      <!-- Mode Toggle -->
+      <div class="mode-toggle">
+        <button class="mode-btn active" data-mode="up">⏫ 正向计时</button>
+        <button class="mode-btn" data-mode="down">⏬ 倒计时</button>
+      </div>
+
+      <!-- Count-up Mode -->
+      <div class="timer-mode active" id="mode-up">
+        <div class="card timer-up-display">
+          <div class="time" id="up-time">00:00:00</div>
+          <div class="status-label" id="up-status">空闲</div>
+        </div>
+        <div class="timer-controls" id="up-controls">
+          <button class="btn-primary" data-action="start">开始</button>
+          <button class="btn-secondary" data-action="pause" style="display:none">暂停</button>
+          <button class="btn-primary" data-action="resume" style="display:none">继续</button>
+          <button class="btn-secondary" data-action="stop" style="display:none">停止</button>
+          <button class="btn-danger" data-action="reset">重置</button>
+        </div>
+        <div class="timer-up-activity card" id="up-activity">
+          <div class="card-title">⏳ 正在做什么？</div>
+          <textarea id="up-activity-input" placeholder="记录你当前正在做的事情..." rows="2"></textarea>
+        </div>
+      </div>
+
+      <!-- Count-down Mode -->
+      <div class="timer-mode" id="mode-down">
+        <div class="card knob-section">
+          <div class="knob-container" id="knob">
+            <svg viewBox="0 0 200 200" class="knob-svg">
+              <circle cx="100" cy="100" r="85" fill="none" stroke="#F0EDE8" stroke-width="12" />
+              <circle cx="100" cy="100" r="85" fill="none" stroke="var(--primary)" stroke-width="12"
+                stroke-linecap="round" stroke-dasharray="534.07" stroke-dashoffset="534.07"
+                transform="rotate(-90, 100, 100)" id="knob-arc" />
+              <circle cx="100" cy="100" r="5" fill="var(--primary)" opacity=".15" />
+            </svg>
+            <div class="knob-center">
+              <div class="knob-time editable" id="knob-time">25:00</div>
+              <div class="knob-edit" id="knob-edit">
+                <input type="number" id="knob-input" min="1" max="45" value="25">
+                <span class="unit">分钟</span>
+              </div>
+              <div class="knob-label" id="knob-label">触摸旋转设定时间</div>
+            </div>
+          </div>
+          <div class="knob-status" id="cd-status">就绪</div>
+        </div>
+        <div class="preset-btns">
+          <button class="preset-btn" data-minutes="5">5分</button>
+          <button class="preset-btn" data-minutes="10">10分</button>
+          <button class="preset-btn" data-minutes="15">15分</button>
+          <button class="preset-btn active" data-minutes="25">25分</button>
+          <button class="preset-btn" data-minutes="45">45分</button>
+        </div>
+        <div class="cd-controls" id="cd-controls">
+          <button class="btn-primary" id="cd-start" data-action="start">开始</button>
+          <button class="btn-secondary" id="cd-pause" data-action="pause" style="display:none">暂停</button>
+          <button class="btn-primary" id="cd-resume" data-action="resume" style="display:none">继续</button>
+          <button class="btn-secondary" id="cd-stop" data-action="stop" style="display:none">停止</button>
+          <button class="btn-danger" id="cd-reset" data-action="reset" style="display:none">重置</button>
+        </div>
+        <div class="timer-up-activity card" id="cd-activity" style="display:none">
+          <div class="card-title">⏳ 正在做什么？</div>
+          <textarea id="cd-activity-input" placeholder="倒计时结束时自动记录（可选）..." rows="2"></textarea>
+        </div>
+      </div>
+
+      <!-- Stats (shared) -->
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="today-count">0</div>
+          <div class="stat-label">今日计时次数</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="today-duration">0</div>
+          <div class="stat-label">今日总时长（分钟）</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">今日记录</div>
+        <div class="records-list" id="records-list">
+          <div class="empty-state">还没有计时记录</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Tab: 今日事项 ===== -->
+    <section id="tab-today" class="tab-content">
+      <div class="card todo-section">
+        <div class="todo-date" id="today-date"></div>
+        <div class="todo-input-wrap">
+          <input type="text" id="today-input" placeholder="添加待办事项..." autocomplete="off">
+          <button id="today-add">添加</button>
+        </div>
+        <ul class="todo-list" id="today-list"></ul>
+      </div>
+      <div class="card journal-section">
+        <label>📝 日志</label>
+        <textarea id="today-journal" placeholder="记录今天的想法和反思..." rows="4"></textarea>
+      </div>
+    </section>
+
+    <!-- ===== Tab: 明日规划 ===== -->
+    <section id="tab-tomorrow" class="tab-content">
+      <div class="card todo-section">
+        <div class="todo-date" id="tomorrow-date"></div>
+        <div class="todo-input-wrap">
+          <input type="text" id="tomorrow-input" placeholder="规划明天的待办事项..." autocomplete="off">
+          <button id="tomorrow-add">添加</button>
+        </div>
+        <ul class="todo-list" id="tomorrow-list"></ul>
+      </div>
+      <div class="card journal-section">
+        <label>📋 明日备忘</label>
+        <textarea id="tomorrow-journal" placeholder="写下明天的计划和注意事项..." rows="4"></textarea>
+      </div>
+    </section>
+
+    <!-- ===== Tab: 日历 ===== -->
+    <section id="tab-calendar" class="tab-content">
+      <div class="card">
+        <div class="cal-nav">
+          <button id="cal-prev">‹</button>
+          <span id="cal-title"></span>
+          <button id="cal-next">›</button>
+        </div>
+        <div class="cal-weekday">日 一 二 三 四 五 六</div>
+        <div class="cal-grid" id="cal-grid"></div>
+      </div>
+      <div class="card" id="cal-detail">
+        <div class="empty-state">选择日期查看记录</div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tab-bar" role="tablist">
+    <button class="tab-btn active" data-tab="timer" role="tab">⏱ 计时</button>
+    <button class="tab-btn" data-tab="today" role="tab">📋 今日</button>
+    <button class="tab-btn" data-tab="tomorrow" role="tab">📝 明日</button>
+    <button class="tab-btn" data-tab="calendar" role="tab">🗓 日历</button>
+  </nav>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
