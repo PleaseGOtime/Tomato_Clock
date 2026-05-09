@@ -1,10 +1,21 @@
 {
-  "name": "tomato-clock",
+  "name": "com.tomatoclock.app",
   "version": "1.0.0",
   "private": true,
-  "description": "番茄钟 - 正向计时 PWA 应用",
+  "description": "番茄钟 - 正向计时 & 倒计时 APK",
   "scripts": {
     "start": "node server.js",
-    "deploy": "rsync -avz --delete ./ user@your-server:/var/www/tomato-clock/"
+    "deploy": "rsync -avz --delete ./ user@your-server:/var/www/tomato-clock/",
+    "cap:sync": "npx cap sync android",
+    "cap:build": "npx cap build android",
+    "cap:open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/local-notifications": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/android": "^7.0.0"
   }
 }

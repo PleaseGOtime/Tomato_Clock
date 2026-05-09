@@ -17,13 +17,16 @@ const MIME = {
   '.webmanifest': 'application/manifest+json',
 };
 
-const CACHE_EXTS = new Set(['.js', '.css', '.svg', '.png', '.ico']);
+const CACHE_EXTS = new Set(['.css', '.svg', '.png', '.ico']);
+const NO_CACHE_EXTS = new Set(['.js']);
 
 function serve(filePath, res) {
   const ext = path.extname(filePath);
   const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
   if (CACHE_EXTS.has(ext)) {
     headers['Cache-Control'] = 'public, max-age=3600';
+  } else if (NO_CACHE_EXTS.has(ext)) {
+    headers['Cache-Control'] = 'no-cache';
   }
   if (path.basename(filePath) === 'index.html') {
     headers['Service-Worker-Allowed'] = '/';

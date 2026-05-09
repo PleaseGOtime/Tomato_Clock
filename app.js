@@ -86,6 +86,7 @@ const TimerUP = {
     const s=this._loadState();
     if (s&&s.state==='running') { this.state='running'; this.startTime=Date.now(); this.accumulated=s.accumulated||0; this.activity=s.activity||''; this._startTick(); this._syncUI(); }
     else if (s&&s.state==='paused') { this.state='paused'; this.startTime=null; this.accumulated=s.accumulated||0; this.activity=s.activity||''; this._syncUI(); }
+    else { this._syncUI(); }
     this.saveTimer=setInterval(()=>this._save(),1000);
   },
 
@@ -381,6 +382,8 @@ const Calendar={
 
 /* ============================== System Tab ============================== */
 function exportData() {
+  // 先记日志，确保日志被包含在导出的数据中
+  Log.add('数据已导出');
   const data = {};
   let count = 0;
   for (let i = 0; i < localStorage.length; i++) {
@@ -399,7 +402,6 @@ function exportData() {
   a.download = 'tomato-clock-' + today() + '.json';
   a.click();
   URL.revokeObjectURL(url);
-  Log.add('数据已导出（' + count + ' 个表）');
   showToast('数据已导出');
 }
 
@@ -415,13 +417,26 @@ function importData() {
       try {
         const pkg = JSON.parse(ev.target.result);
         if (!pkg.data || !pkg.version) return showToast('无效的备份文件');
-        if (!confirm('导入将覆盖所有本地数据，页面将重新加载。确认继续？')) return;
+        if (!confirm('导入将覆盖所有本地数据。确认继续？')) return;
         for (const key of Object.keys(pkg.data)) {
           localStorage.setItem(key, JSON.stringify(pkg.data[key]));
         }
+        // 重置计时器（导入的计时状态无意义）
+        if (TimerUP.tickId) TimerUP._stopTick();
+        if (TimerUP.saveTimer) clearInterval(TimerUP.saveTimer);
+        TimerUP._reset();
+        TimerUP._save();
+        if (TimerDOWN.tickId) TimerDOWN._stopTick();
+        TimerDOWN.state = 'idle';
+        TimerDOWN.remaining = TimerDOWN.total;
+        TimerDOWN._save();
+        Knob.setArc(TimerDOWN.remaining);
+        TimerDOWN._syncUI();
+        // 刷新日历和当前视图
+        Calendar.init();
         Log.add('数据已导入（' + Object.keys(pkg.data).length + ' 个表）');
         showToast('数据导入成功');
-        setTimeout(() => location.reload(), 800);
+        switchTab(currentTab);
       } catch { showToast('文件格式错误'); }
     };
     reader.readAsText(file);
@@ -430,6 +445,7 @@ function importData() {
 }
 
 function renderSystemTab() {
+  renderStorageInfo();
   const logs = Log.getAll();
   const list = document.getElementById('system-log-list');
   if (!logs.length) {
@@ -441,6 +457,44 @@ function renderSystemTab() {
     const t = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
     return '<div class="log-item"><span class="log-time">' + t + '</span><span class="log-msg">' + esc(l.msg) + '</span></div>';
   }).join('');
+}
+
+function renderStorageInfo() {
+  const el = document.getElementById('storage-info');
+  let bytes = 0;
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k.startsWith('tc_')) bytes += k.length + (localStorage.getItem(k) || '').length;
+  }
+  const records = DB.getRecords().length;
+  const raw = DB._get('todos', {});
+  const todos = Object.values(raw).reduce((s, a) => s + a.length, 0);
+  const logs = Log.getAll();
+  const lastExport = logs.find(l => l.msg.includes('已导出'));
+  const lastImport = logs.find(l => l.msg.includes('已导入'));
+  let backup = '从未';
+  if (lastExport) { const d = new Date(lastExport.time); backup = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  else if (lastImport) { const d = new Date(lastImport.time); backup = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'（导入）'; }
+
+  // 先渲染基本信息（同步，确保不卡住）
+  el.innerHTML =
+    '<div class="storage-row"><span class="label">存储位置</span><span class="value">手机本地</span></div>' +
+    '<div class="storage-row"><span class="label">防清除保护</span><span class="value" id="persist-status">检测中...</span></div>' +
+    '<div class="storage-row"><span class="label">数据大小</span><span class="value">'+(bytes/1024).toFixed(1)+' KB</span></div>' +
+    '<div class="storage-row"><span class="label">计时记录</span><span class="value">'+records+' 条</span></div>' +
+    '<div class="storage-row"><span class="label">待办事项</span><span class="value">'+todos+' 项</span></div>' +
+    '<div class="storage-row"><span class="label">上次备份</span><span class="value">'+backup+'</span></div>';
+
+  // 异步查询持久化状态
+  if (navigator.storage && typeof navigator.storage.persisted === 'function') {
+    navigator.storage.persisted().then(granted => {
+      document.getElementById('persist-status').textContent = granted ? '已启用' : '未启用';
+    }).catch(() => {
+      document.getElementById('persist-status').textContent = '未知';
+    });
+  } else {
+    document.getElementById('persist-status').textContent = '不支持';
+  }
 }
 
 /* ============================== Tab ============================== */
@@ -534,6 +588,13 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   // 每日数据快照
   Log.dataSnapshot();
+
+  // 请求持久化存储（防止浏览器自动清除）
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persist().then(granted => {
+      if (granted) Log.add('存储已设为持久保留');
+    });
+  }
 
   // 渲染当前 Tab（计时页初始显示）
   renderStats();
