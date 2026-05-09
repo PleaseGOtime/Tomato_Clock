@@ -14,6 +14,7 @@ const DB = {
   getJournal(date) { const a = this._get('journals', {}); return a[date] || ''; },
   saveJournal(date, text) { const a = this._get('journals', {}); a[date] = text; this._set('journals', a); },
 
+  deleteRecord(id) { this.saveRecords(this.getRecords().filter(r=>r.id!==id)); },
   getRecordsByDate(date) { return this.getRecords().filter(r => r.date === date); },
   getStats(date) { const r = this.getRecordsByDate(date); return { count: r.length, totalMinutes: Math.round(r.reduce((s, x) => s + x.duration, 0) / 60), records: r }; }
 };
@@ -27,7 +28,7 @@ function tomorrow() { const d = new Date(); d.setDate(d.getDate()+1); return dat
 function fmtDuration(s) { const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), s2=Math.floor(s%60); return (h?h+'时':'')+(h||m?m+'分':'')+s2+'秒'; }
 function fmtTimeDisplay(s) { const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), s2=Math.floor(s%60); return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s2).padStart(2,'0'); }
 function fmtCountdown(s) { const m=Math.floor(Math.max(0,s)/60), s2=Math.floor(Math.max(0,s)%60); return String(m).padStart(2,'0')+':'+String(s2).padStart(2,'0'); }
-function fmtTimeRange(a,b) { const f=(s)=>{const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(Math.floor(s%60)).padStart(2,'0');}; return f(a)+' - '+f(b); }
+function fmtClockTime(ts) { const d=new Date(ts*1000); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 function vibrate() { if (navigator.vibrate) navigator.vibrate([200,100,200,100,400]); }
 
@@ -60,7 +61,7 @@ const TimerUP = {
     if(e>0){DB.addRecord({id:Date.now(),date:today(),startTime:Math.floor((this.startTime||Date.now()-e*1000)/1000),endTime:Math.floor(Date.now()/1000),duration:e,activity:this.activity});showToast('已保存：'+fmtDuration(e));}
     this._reset(); this._syncUI(); this._save();
   },
-  reset() { if(this.state==='running')this._stopTick(); this._reset(); this._syncUI(); this._save(); },
+  reset() { if(this.state==='running'){this.accumulated+=(Date.now()-this.startTime)/1000;this._stopTick();}const e=Math.floor(this.accumulated);if(e>0&&this.state!=='idle'){const act=document.getElementById('up-activity-input').value.trim()||'未记录';DB.addRecord({id:Date.now(),date:today(),startTime:Math.floor((this.startTime||Date.now()-e*1000)/1000),endTime:Math.floor(Date.now()/1000),duration:e,activity:act});showToast('已保存：'+fmtDuration(e));} this._reset(); this._syncUI(); this._save(); },
   _reset() { this.state='idle';this.startTime=null;this.accumulated=0;this.activity='';document.getElementById('up-activity-input').value=''; },
   _startTick() { this._stopTick(); this.tickId=setInterval(()=>this._updDisplay(),200); this._updDisplay(); },
   _stopTick() { if(this.tickId){clearInterval(this.tickId);this.tickId=null;} },
@@ -114,7 +115,7 @@ const TimerDOWN = {
     }
     this.state='idle'; this.remaining=this.total; Knob.setArc(this.remaining); this._updDisplay(); this._syncUI(); this._save();
   },
-  reset() { this._stopTick(); this.state='idle'; this.remaining=this.total; Knob.setArc(this.remaining); this._updDisplay(); this._syncUI(); this._save(); },
+  reset() { const saveable=(this.state==='running'||this.state==='paused');if(this.state==='running')this._stopTick();const e=Math.floor(this.total-this.remaining);if(e>0&&saveable){const act=document.getElementById('cd-activity-input').value.trim()||('倒计时 '+Math.round(e/60)+'分钟');const now=Math.floor(Date.now()/1000);DB.addRecord({id:Date.now(),date:today(),startTime:now-e,endTime:now,duration:e,activity:act});showToast('已保存：'+fmtDuration(e));} this.state='idle'; this.remaining=this.total; Knob.setArc(this.remaining); this._updDisplay(); this._syncUI(); this._save(); },
 
   setTime(s) {
     if(this.state!=='idle')return;
@@ -250,7 +251,7 @@ function renderStats() {
   if(!records.length){list.innerHTML='<div class="empty-state">还没有计时记录</div>';return;}
   list.innerHTML=records.map(r=>{
     const st=r.startTime,et=r.endTime||st+r.duration;
-    return '<div class="record-item"><div class="left"><div class="time">'+fmtTimeRange(st,et)+'</div><div class="activity-text">'+esc(r.activity||'未记录')+'</div></div><div class="duration">'+fmtDuration(r.duration)+'</div></div>';
+    return '<div class="record-item"><div class="left"><div class="time">'+fmtClockTime(st)+' - '+fmtClockTime(et)+'</div><div class="activity-text">'+esc(r.activity||'未记录')+'</div></div><div class="duration">'+fmtDuration(r.duration)+'</div><button class="delete-btn" data-action="del-rec" data-id="'+r.id+'">✕</button></div>';
   }).join('');
 }
 
@@ -327,7 +328,7 @@ const Calendar={
       html+='<div style="margin-top:4px">';
       records.forEach(r=>{
         const st=r.startTime,et=r.endTime||st+r.duration;
-        html+='<div class="record-item" style="margin-bottom:4px"><div class="left"><div class="time">'+fmtTimeRange(st,et)+'</div><div class="activity-text">'+esc(r.activity||'未记录')+'</div></div><div class="duration">'+fmtDuration(r.duration)+'</div></div>';
+        html+='<div class="record-item" style="margin-bottom:4px"><div class="left"><div class="time">'+fmtClockTime(st)+' - '+fmtClockTime(et)+'</div><div class="activity-text">'+esc(r.activity||'未记录')+'</div></div><div class="duration">'+fmtDuration(r.duration)+'</div><button class="delete-btn" data-action="del-rec" data-id="'+r.id+'">✕</button></div>';
       });
       html+='</div>';
     }
@@ -407,6 +408,10 @@ document.addEventListener('DOMContentLoaded',()=>{
     if(a==='delete')deleteTodoFor(date,i,'tomorrow-list','tomorrow-input','tomorrow-journal');
   });
   document.getElementById('tomorrow-journal').addEventListener('blur',()=>saveJournalFor(tomorrow(),'tomorrow-journal'));
+
+  // Record deletion (stats + calendar)
+  document.getElementById('records-list').addEventListener('click',e=>{const b=e.target.closest('[data-action="del-rec"]');if(b&&confirm('删除这条记录？')){DB.deleteRecord(parseInt(b.dataset.id));renderStats();}});
+  document.getElementById('cal-detail').addEventListener('click',e=>{const b=e.target.closest('[data-action="del-rec"]');if(b&&confirm('删除这条记录？')){DB.deleteRecord(parseInt(b.dataset.id));Calendar._renderDetail(Calendar.selected);}});
 
   // Calendar nav
   document.getElementById('cal-prev').addEventListener('click',()=>Calendar.prevMonth());

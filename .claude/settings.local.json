@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node *)"
+      "Bash(node *)",
+      "Skill(update-config)"
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "echo \"$(basename \\\"$(pwd)\\\") | ${ANTHROPIC_MODEL:-unknown}\"",
+    "refreshInterval": 30
   }
 }
