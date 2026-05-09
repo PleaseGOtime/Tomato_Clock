@@ -1,0 +1,32 @@
+# Tomato Clock - systemd service
+# 1. 将本文件复制到 /etc/systemd/system/tomato-clock.service
+# 2. 修改 WorkingDirectory 为实际部署路径
+# 3. 如需使用标准 HTTP 端口 80，可搭配 iptables 转发：
+#    sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3000
+# 4. 启动：sudo systemctl daemon-reload && sudo systemctl enable --now tomato-clock
+
+[Unit]
+Description=Tomato Clock PWA
+After=network.target
+
+[Service]
+Type=simple
+User=nobody
+WorkingDirectory=/var/www/tomato-clock
+Environment=PORT=3000
+Environment=HOST=0.0.0.0
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+
+# 资源限制（防止影响服务器其他服务）
+MemoryMax=64M
+CPUQuota=20%
+TasksMax=32
+LimitNOFILE=256
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

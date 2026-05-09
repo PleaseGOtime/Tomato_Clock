@@ -39,6 +39,45 @@ function showToast(msg) {
   clearTimeout(_toastTimer); _toastTimer=setTimeout(()=>el.classList.remove('show'),2000);
 }
 
+/* ============================== System Log ============================== */
+const Log = {
+  getAll() { return DB._get('logs', []); },
+  _save(logs) { DB._set('logs', logs); },
+  add(msg) {
+    const logs = this.getAll();
+    logs.unshift({ time: Date.now(), msg });
+    if (logs.length > 200) logs.length = 200;
+    this._save(logs);
+  },
+  dataSnapshot() {
+    const lastSnap = DB._get('_last_snap', '');
+    const d = today();
+    if (lastSnap === d) return;
+    DB._set('_last_snap', d);
+    const records = DB.getRecords();
+    const raw = DB._get('todos', {});
+    const todoCount = Object.values(raw).reduce((s, arr) => s + arr.length, 0);
+    this.add('数据快照：' + records.length + ' 条记录，' + todoCount + ' 项待办');
+  }
+};
+
+// 自动记录数据变更到系统日志
+{
+  const _addRecord = DB.addRecord;
+  DB.addRecord = function (rec) {
+    const r = _addRecord.call(this, rec);
+    Log.add('记录已保存：' + (r.activity || '未记录') + '（' + fmtDuration(r.duration) + '）');
+    return r;
+  };
+  const _deleteRecord = DB.deleteRecord;
+  DB.deleteRecord = function (id) {
+    const records = this.getRecords();
+    const rec = records.find(r => r.id === id);
+    _deleteRecord.call(this, id);
+    if (rec) Log.add('记录已删除：' + (rec.activity || '未记录'));
+  };
+}
+
 /* ============================== Timer UP ============================== */
 const TimerUP = {
   state:'idle', startTime:null, accumulated:0, activity:'', tickId:null, saveTimer:null,
@@ -261,9 +300,9 @@ function renderTodosFor(date, listId, inputId, addBtnId, dateLabelId, journalId)
   const todos=DB.getTodos(date);
   const list=document.getElementById(listId);
   if(dateLabelId) document.getElementById(dateLabelId).textContent=date;
+  document.getElementById(journalId).value=DB.getJournal(date);
   if(!todos.length){list.innerHTML='<div class="empty-state">还没有待办事项</div>';return;}
   list.innerHTML=todos.map((t,i)=>'<li class="todo-item" data-date="'+date+'" data-index="'+i+'"><div class="checkbox'+(t.done?' done':'')+'" data-action="toggle"></div><span class="todo-text'+(t.done?' done':'')+'">'+esc(t.text)+'</span><button class="delete-btn" data-action="delete">✕</button></li>').join('');
-  document.getElementById(journalId).value=DB.getJournal(date);
 }
 
 function addTodoFor(date, inputId, listId, journalId) {
@@ -340,6 +379,70 @@ const Calendar={
   nextMonth(){this.month++;if(this.month>11){this.month=0;this.year++;}this.selected='';this.render();}
 };
 
+/* ============================== System Tab ============================== */
+function exportData() {
+  const data = {};
+  let count = 0;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key.startsWith('tc_')) {
+      try { data[key] = JSON.parse(localStorage.getItem(key)); count++; } catch {}
+    }
+  }
+  const blob = new Blob(
+    [JSON.stringify({ version: 1, exportedAt: Date.now(), data }, null, 2)],
+    { type: 'application/json' }
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'tomato-clock-' + today() + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  Log.add('数据已导出（' + count + ' 个表）');
+  showToast('数据已导出');
+}
+
+function importData() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        const pkg = JSON.parse(ev.target.result);
+        if (!pkg.data || !pkg.version) return showToast('无效的备份文件');
+        if (!confirm('导入将覆盖所有本地数据，页面将重新加载。确认继续？')) return;
+        for (const key of Object.keys(pkg.data)) {
+          localStorage.setItem(key, JSON.stringify(pkg.data[key]));
+        }
+        Log.add('数据已导入（' + Object.keys(pkg.data).length + ' 个表）');
+        showToast('数据导入成功');
+        setTimeout(() => location.reload(), 800);
+      } catch { showToast('文件格式错误'); }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+function renderSystemTab() {
+  const logs = Log.getAll();
+  const list = document.getElementById('system-log-list');
+  if (!logs.length) {
+    list.innerHTML = '<div class="empty-state">暂无系统日志</div>';
+    return;
+  }
+  list.innerHTML = logs.map(l => {
+    const d = new Date(l.time);
+    const t = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    return '<div class="log-item"><span class="log-time">' + t + '</span><span class="log-msg">' + esc(l.msg) + '</span></div>';
+  }).join('');
+}
+
 /* ============================== Tab ============================== */
 let currentTab='timer';
 
@@ -353,6 +456,7 @@ function switchTab(tab) {
   if(tab==='today'){renderTodosFor(today(),'today-list','today-input','today-add','today-date','today-journal');}
   if(tab==='tomorrow'){renderTodosFor(tomorrow(),'tomorrow-list','tomorrow-input','tomorrow-add','tomorrow-date','tomorrow-journal');}
   if(tab==='calendar'){Calendar.render();}
+  if(tab==='system'){renderSystemTab();}
 }
 
 /* ============================== Init ============================== */
@@ -418,11 +522,21 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cal-prev').addEventListener('click',()=>Calendar.prevMonth());
   document.getElementById('cal-next').addEventListener('click',()=>Calendar.nextMonth());
 
+  // System tab
+  document.getElementById('btn-export').addEventListener('click',exportData);
+  document.getElementById('btn-import').addEventListener('click',importData);
+
   // Init
   TimerUP.init();
   TimerDOWN.init();
   Knob.init();
   Calendar.init();
+
+  // 每日数据快照
+  Log.dataSnapshot();
+
+  // 渲染当前 Tab（计时页初始显示）
+  renderStats();
 
   // SW
   if('serviceWorker'in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});

@@ -2,12 +2,17 @@
   "permissions": {
     "allow": [
       "Bash(node *)",
-      "Skill(update-config)"
+      "Skill(update-config)",
+      "Bash(curl -s http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/app.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/nonexistent)",
+      "Bash(kill %1)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill /PID 34556 /F)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "Bash(cmd.exe /c \"taskkill /F /PID 34556\")",
+      "Bash(cmd.exe *)",
+      "Bash(powershell *)"
     ]
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "echo \"$(basename \\\"$(pwd)\\\") | ${ANTHROPIC_MODEL:-unknown}\"",
-    "refreshInterval": 30
   }
 }

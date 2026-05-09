@@ -246,6 +246,17 @@
     }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+    /* ===== System Tab ===== */
+    .log-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+    .log-item { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .log-item:last-child { border-bottom: none; }
+    .log-time { color: var(--text2); white-space: nowrap; font-family: "SF Mono", "Cascadia Code", monospace; font-size: 11px; flex-shrink: 0; }
+    .log-msg { color: var(--text); line-height: 1.4; }
+    .data-actions { display: flex; gap: 8px; }
+    .data-actions button { flex: 1; border: none; padding: 10px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .btn-export { background: var(--primary); color: #fff; }
+    .btn-import { background: #F0EDE8; color: var(--text); }
+
     /* Scrollbar */
     main::-webkit-scrollbar { width: 4px; }
     main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -405,6 +416,23 @@
         <div class="empty-state">选择日期查看记录</div>
       </div>
     </section>
+
+    <!-- ===== Tab: 系统 ===== -->
+    <section id="tab-system" class="tab-content">
+      <div class="card">
+        <div class="card-title">数据管理</div>
+        <div class="data-actions">
+          <button class="btn-export" id="btn-export">导出备份</button>
+          <button class="btn-import" id="btn-import">导入恢复</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">系统日志</div>
+        <div class="log-list" id="system-log-list">
+          <div class="empty-state">暂无系统日志</div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <nav class="tab-bar" role="tablist">
@@ -412,6 +440,7 @@
     <button class="tab-btn" data-tab="today" role="tab">📋 今日</button>
     <button class="tab-btn" data-tab="tomorrow" role="tab">📝 明日</button>
     <button class="tab-btn" data-tab="calendar" role="tab">🗓 日历</button>
+    <button class="tab-btn" data-tab="system" role="tab">⚙️ 系统</button>
   </nav>
 
   <div class="toast" id="toast"></div>
