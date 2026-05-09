@@ -58,10 +58,10 @@ const TimerUP = {
     if(this.state==='running'){this.accumulated+=(Date.now()-this.startTime)/1000;this._stopTick();}
     this.activity=document.getElementById('up-activity-input').value.trim()||'未记录';
     const e=Math.floor(this.accumulated);
-    if(e>0){DB.addRecord({id:Date.now(),date:today(),startTime:Math.floor((this.startTime||Date.now()-e*1000)/1000),endTime:Math.floor(Date.now()/1000),duration:e,activity:this.activity});showToast('已保存：'+fmtDuration(e));}
+    if(e>0){DB.addRecord({id:Date.now(),date:today(),startTime:Math.floor((this.startTime||Date.now()-e*1000)/1000),endTime:Math.floor(Date.now()/1000),duration:e,activity:this.activity});showToast('已保存：'+fmtDuration(e));renderStats();}
     this._reset(); this._syncUI(); this._save();
   },
-  reset() { if(this.state==='running'){this.accumulated+=(Date.now()-this.startTime)/1000;this._stopTick();}const e=Math.floor(this.accumulated);if(e>0&&this.state!=='idle'){const act=document.getElementById('up-activity-input').value.trim()||'未记录';DB.addRecord({id:Date.now(),date:today(),startTime:Math.floor((this.startTime||Date.now()-e*1000)/1000),endTime:Math.floor(Date.now()/1000),duration:e,activity:act});showToast('已保存：'+fmtDuration(e));} this._reset(); this._syncUI(); this._save(); },
+  reset() { if(this.state==='running'){this.accumulated+=(Date.now()-this.startTime)/1000;this._stopTick();}const e=Math.floor(this.accumulated);if(e>0&&this.state!=='idle'){const act=document.getElementById('up-activity-input').value.trim()||'未记录';DB.addRecord({id:Date.now(),date:today(),startTime:Math.floor((this.startTime||Date.now()-e*1000)/1000),endTime:Math.floor(Date.now()/1000),duration:e,activity:act});showToast('已保存：'+fmtDuration(e));renderStats();} this._reset(); this._syncUI(); this._save(); },
   _reset() { this.state='idle';this.startTime=null;this.accumulated=0;this.activity='';document.getElementById('up-activity-input').value=''; },
   _startTick() { this._stopTick(); this.tickId=setInterval(()=>this._updDisplay(),200); this._updDisplay(); },
   _stopTick() { if(this.tickId){clearInterval(this.tickId);this.tickId=null;} },
@@ -112,10 +112,11 @@ const TimerDOWN = {
       const now=Math.floor(Date.now()/1000);
       DB.addRecord({id:Date.now(),date:today(),startTime:now-elapsed,endTime:now,duration:elapsed,activity:act});
       showToast('已保存：'+fmtDuration(elapsed));
+      renderStats();
     }
     this.state='idle'; this.remaining=this.total; Knob.setArc(this.remaining); this._updDisplay(); this._syncUI(); this._save();
   },
-  reset() { const saveable=(this.state==='running'||this.state==='paused');if(this.state==='running')this._stopTick();const e=Math.floor(this.total-this.remaining);if(e>0&&saveable){const act=document.getElementById('cd-activity-input').value.trim()||('倒计时 '+Math.round(e/60)+'分钟');const now=Math.floor(Date.now()/1000);DB.addRecord({id:Date.now(),date:today(),startTime:now-e,endTime:now,duration:e,activity:act});showToast('已保存：'+fmtDuration(e));} this.state='idle'; this.remaining=this.total; Knob.setArc(this.remaining); this._updDisplay(); this._syncUI(); this._save(); },
+  reset() { const saveable=(this.state==='running'||this.state==='paused');if(this.state==='running')this._stopTick();const e=Math.floor(this.total-this.remaining);if(e>0&&saveable){const act=document.getElementById('cd-activity-input').value.trim()||('倒计时 '+Math.round(e/60)+'分钟');const now=Math.floor(Date.now()/1000);DB.addRecord({id:Date.now(),date:today(),startTime:now-e,endTime:now,duration:e,activity:act});showToast('已保存：'+fmtDuration(e));renderStats();} this.state='idle'; this.remaining=this.total; Knob.setArc(this.remaining); this._updDisplay(); this._syncUI(); this._save(); },
 
   setTime(s) {
     if(this.state!=='idle')return;
@@ -136,7 +137,7 @@ const TimerDOWN = {
       const act=document.getElementById('cd-activity-input').value.trim()||('倒计时 '+Math.round(this.total/60)+'分钟');
       const now=Math.floor(Date.now()/1000);
       DB.addRecord({id:Date.now(),date:today(),startTime:now-this.total,endTime:now,duration:this.total,activity:act});
-      this.state='finished';vibrate();this._syncUI();showToast('⏰ 倒计时完成！');
+      this.state='finished';vibrate();this._syncUI();showToast('⏰ 倒计时完成！');renderStats();
     }
   },
   _startTick() { this._stopTick(); this.tickId=setInterval(()=>this._tick(),1000); this._tick(); },
