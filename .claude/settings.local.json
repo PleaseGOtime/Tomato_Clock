@@ -50,7 +50,8 @@
       "Bash(./gradlew assembleDebug --no-daemon -Dorg.gradle.java.home=\"C:/Program Files/Java\")",
       "Bash(/c/Users/杨清洪/AppData/Local/Android/Sdk/build-tools/35.0.0/aapt dump *)",
       "Bash(/c/Users/杨清洪/AppData/Local/Android/Sdk/build-tools/35.0.0/aapt2 dump *)",
-      "Bash(cmd //c __TRACKED_VAR__/build-tools/35.0.0/aapt.exe dump permissions D:/YangQingHong/VSCode/Claude_Code/Tomato_Clock/android/app/build/outputs/apk/debug/app-debug.apk)"
+      "Bash(cmd //c __TRACKED_VAR__/build-tools/35.0.0/aapt.exe dump permissions D:/YangQingHong/VSCode/Claude_Code/Tomato_Clock/android/app/build/outputs/apk/debug/app-debug.apk)",
+      "Bash(JAVA_HOME=\"C:/Program Files/Java\" ./gradlew assembleDebug)"
     ]
   }
 }

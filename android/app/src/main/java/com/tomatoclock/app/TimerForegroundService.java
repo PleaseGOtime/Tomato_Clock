@@ -8,44 +8,45 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 
 import androidx.core.app.NotificationCompat;
 
 public class TimerForegroundService extends Service {
 
-    private static final int NOTIFICATION_ID = 1001;
-    private static final String CHANNEL_ID = "timer_foreground";
+    private static final int FG_NOTIFICATION_ID = 1001;
+    private static final int COMPLETE_NOTIFICATION_ID = 1002;
+    private static final String CHANNEL_FG = "timer_foreground";
+    private static final String CHANNEL_COMPLETE = "timer_complete";
 
-    private static final String ACTION_START = "com.tomatoclock.action.START_TIMER";
-    private static final String ACTION_STOP = "com.tomatoclock.action.STOP_TIMER";
-    private static final String ACTION_UPDATE = "com.tomatoclock.action.UPDATE_TIMER";
+    private static final String EXTRA_MODE = "timer_mode";
 
-    private static String currentTime = "00:00:00";
+    private Handler handler;
+    private String timerMode;
 
     @Override
     public void onCreate() {
         super.onCreate();
-        createNotificationChannel();
+        createChannels();
+        handler = new Handler(Looper.getMainLooper());
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null) return START_STICKY;
 
-        String action = intent.getAction();
-        if (ACTION_START.equals(action)) {
-            currentTime = intent.getStringExtra("time");
-            if (currentTime == null) currentTime = "00:00:00";
-            startForeground(NOTIFICATION_ID, buildNotification(currentTime));
-        } else if (ACTION_UPDATE.equals(action)) {
-            String time = intent.getStringExtra("time");
-            if (time != null) {
-                currentTime = time;
-                NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-                nm.notify(NOTIFICATION_ID, buildNotification(currentTime));
-            }
-        } else if (ACTION_STOP.equals(action)) {
+        String mode = intent.getStringExtra(EXTRA_MODE);
+        if ("up".equals(mode)) {
+            timerMode = "up";
+            startForeground(FG_NOTIFICATION_ID, fgNotification("正向计时中"));
+        } else if ("down".equals(mode)) {
+            timerMode = "down";
+            startForeground(FG_NOTIFICATION_ID, fgNotification("倒计时中"));
+            startCountdownCheck();
+        } else if ("stop".equals(mode)) {
+            stopCountdownCheck();
             stopSelf();
         }
 
@@ -57,59 +58,128 @@ public class TimerForegroundService extends Service {
         return null;
     }
 
-    private Notification buildNotification(String time) {
+    private void startCountdownCheck() {
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (!"down".equals(timerMode)) return;
+
+                // Use TimerPlugin static fields so pause/resume adjustments are respected
+                long elapsed = (System.currentTimeMillis() - TimerPlugin.startTimeMillis) / 1000;
+                long totalSec = TimerPlugin.totalSeconds;
+                long remaining = totalSec - elapsed;
+
+                if (remaining > 0) {
+                    String timeStr = fmtCountdown(remaining);
+                    NotificationManager nm = getSystemService(NotificationManager.class);
+                    nm.notify(FG_NOTIFICATION_ID, fgNotification("剩余 " + timeStr));
+                    handler.postDelayed(this, 1000);
+                } else {
+                    timerMode = null;
+                    TimerPlugin.timerRunning = false;
+                    TimerPlugin.timerType = null;
+                    TimerPlugin.timerCompleted = true;
+                    showCompletionNotification();
+                    stopSelf();
+                }
+            }
+        });
+    }
+
+    private void stopCountdownCheck() {
+        if (handler != null) {
+            handler.removeCallbacksAndMessages(null);
+        }
+    }
+
+    private void showCompletionNotification() {
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent pi = PendingIntent.getActivity(this, 0, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        Notification notification = new NotificationCompat.Builder(this, CHANNEL_COMPLETE)
+                .setContentTitle("倒计时完成")
+                .setContentText("番茄钟倒计时结束了！")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .setDefaults(Notification.DEFAULT_ALL)
+                .build();
+
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                    == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                nm.notify(COMPLETE_NOTIFICATION_ID, notification);
+            }
+        } else {
+            nm.notify(COMPLETE_NOTIFICATION_ID, notification);
+        }
+    }
+
+    private Notification fgNotification(String text) {
         Intent tapIntent = new Intent(this, MainActivity.class);
         tapIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        PendingIntent pendingIntent = PendingIntent.getActivity(
-                this, 0, tapIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
+        PendingIntent pi = PendingIntent.getActivity(this, 0, tapIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("西续猆 正在计时")
-                .setContentText(time)
+        return new NotificationCompat.Builder(this, CHANNEL_FG)
+                .setContentTitle("番茄钟")
+                .setContentText(text)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setOngoing(true)
-                .setContentIntent(pendingIntent)
+                .setContentIntent(pi)
                 .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
                 .build();
     }
 
-    private void createNotificationChannel() {
+    private void createChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                    CHANNEL_ID,
-                    "记时服务",
-                    NotificationManager.IMPORTANCE_LOW
-            );
-            channel.setDescription("无声通知，持续显示记时状态");
-            channel.setShowBadge(false);
             NotificationManager nm = getSystemService(NotificationManager.class);
-            nm.createNotificationChannel(channel);
+
+            NotificationChannel fg = new NotificationChannel(
+                    CHANNEL_FG, "计时服务", NotificationManager.IMPORTANCE_LOW);
+            fg.setDescription("持续显示计时状态，无声");
+            fg.setShowBadge(false);
+            nm.createNotificationChannel(fg);
+
+            NotificationChannel complete = new NotificationChannel(
+                    CHANNEL_COMPLETE, "计时完成", NotificationManager.IMPORTANCE_HIGH);
+            complete.setDescription("倒计时结束时通知");
+            complete.enableVibration(true);
+            nm.createNotificationChannel(complete);
         }
     }
 
-    public static void start(Context context, String time) {
-        Intent intent = new Intent(context, TimerForegroundService.class);
-        intent.setAction(ACTION_START);
-        intent.putExtra("time", time);
+    private static String fmtCountdown(long s) {
+        long m = s / 60, sec = s % 60;
+        return String.format("%02d:%02d", m, sec);
+    }
+
+    public static void startForUp(Context context) {
+        Intent i = new Intent(context, TimerForegroundService.class);
+        i.putExtra(EXTRA_MODE, "up");
+        start(context, i);
+    }
+
+    public static void startForDown(Context context, long totalSeconds) {
+        Intent i = new Intent(context, TimerForegroundService.class);
+        i.putExtra(EXTRA_MODE, "down");
+        start(context, i);
+    }
+
+    public static void stop(Context context) {
+        Intent i = new Intent(context, TimerForegroundService.class);
+        i.putExtra(EXTRA_MODE, "stop");
+        context.startService(i);
+    }
+
+    private static void start(Context context, Intent intent) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(intent);
         } else {
             context.startService(intent);
         }
-    }
-
-    public static void update(Context context, String time) {
-        Intent intent = new Intent(context, TimerForegroundService.class);
-        intent.setAction(ACTION_UPDATE);
-        intent.putExtra("time", time);
-        context.startService(intent);
-    }
-
-    public static void stop(Context context) {
-        Intent intent = new Intent(context, TimerForegroundService.class);
-        intent.setAction(ACTION_STOP);
-        context.startService(intent);
     }
 }

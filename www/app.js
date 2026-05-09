@@ -20,11 +20,9 @@ const DB = {
 };
 
 /* ============================== Utils ============================== */
-function dateStr(d) {
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-}
+function dateStr(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function today() { return dateStr(new Date()); }
-function tomorrow() { const d = new Date(); d.setDate(d.getDate()+1); return dateStr(d); }
+function tomorrow() { const d=new Date(); d.setDate(d.getDate()+1); return dateStr(d); }
 function fmtDuration(s) { const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), s2=Math.floor(s%60); return (h?h+'时':'')+(h||m?m+'分':'')+s2+'秒'; }
 function fmtTimeDisplay(s) { const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), s2=Math.floor(s%60); return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s2).padStart(2,'0'); }
 function fmtCountdown(s) { const m=Math.floor(Math.max(0,s)/60), s2=Math.floor(Math.max(0,s)%60); return String(m).padStart(2,'0')+':'+String(s2).padStart(2,'0'); }
@@ -33,109 +31,102 @@ function esc(s) { const d=document.createElement('div'); d.textContent=s; return
 function vibrate() { if (navigator.vibrate) navigator.vibrate([200,100,200,100,400]); }
 
 let _toastTimer;
-function showToast(msg) {
-  const el=document.getElementById('toast');
-  el.textContent=msg; el.classList.add('show');
-  clearTimeout(_toastTimer); _toastTimer=setTimeout(()=>el.classList.remove('show'),2000);
-}
+function showToast(msg) { const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(_toastTimer); _toastTimer=setTimeout(()=>el.classList.remove('show'),2000); }
 
 /* ============================== System Log ============================== */
 const Log = {
   getAll() { return DB._get('logs', []); },
   _save(logs) { DB._set('logs', logs); },
-  add(msg) {
-    const logs = this.getAll();
-    logs.unshift({ time: Date.now(), msg });
-    if (logs.length > 200) logs.length = 200;
-    this._save(logs);
-  },
+  add(msg) { const logs=this.getAll(); logs.unshift({time:Date.now(),msg}); if(logs.length>200)logs.length=200; this._save(logs); },
   dataSnapshot() {
-    const lastSnap = DB._get('_last_snap', '');
-    const d = today();
-    if (lastSnap === d) return;
-    DB._set('_last_snap', d);
-    const records = DB.getRecords();
-    const raw = DB._get('todos', {});
-    const todoCount = Object.values(raw).reduce((s, arr) => s + arr.length, 0);
-    this.add('数据快照：' + records.length + ' 条记录，' + todoCount + ' 项待办');
+    const lastSnap=DB._get('_last_snap',''); const d=today(); if(lastSnap===d)return;
+    DB._set('_last_snap',d); const records=DB.getRecords(); const raw=DB._get('todos',{});
+    const todoCount=Object.values(raw).reduce((s,arr)=>s+arr.length,0);
+    this.add('数据快照：'+records.length+' 条记录，'+todoCount+' 项待办');
   }
 };
-
-// 自动记录数据变更到系统日志
-{
-  const _addRecord = DB.addRecord;
-  DB.addRecord = function (rec) {
-    const r = _addRecord.call(this, rec);
-    Log.add('记录已保存：' + (r.activity || '未记录') + '（' + fmtDuration(r.duration) + '）');
-    return r;
-  };
-  const _deleteRecord = DB.deleteRecord;
-  DB.deleteRecord = function (id) {
-    const records = this.getRecords();
-    const rec = records.find(r => r.id === id);
-    _deleteRecord.call(this, id);
-    if (rec) Log.add('记录已删除：' + (rec.activity || '未记录'));
-  };
-}
+{ const _add=DB.addRecord; DB.addRecord=function(rec){const r=_add.call(this,rec);Log.add('记录已保存：'+(r.activity||'未记录')+'（'+fmtDuration(r.duration)+'）');return r;}; const _del=DB.deleteRecord; DB.deleteRecord=function(id){const records=this.getRecords();const rec=records.find(r=>r.id===id);_del.call(this,id);if(rec)Log.add('记录已删除：'+(rec.activity||'未记录'));}; }
 
 /* ============================== Native Bridge ============================== */
 const NativeBridge = {
-  available: typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform(),
-  _updateThrottle: 0,
-
-  startTimer(time) {
-    if (!this.available) return;
-    try {
-      const { TimerPlugin } = window.Capacitor.Plugins;
-      if (TimerPlugin) TimerPlugin.start({ time });
-    } catch {}
+  get available() {
+    return typeof window.androidBridge !== 'undefined';
   },
 
-  updateTimer(time) {
-    if (!this.available) return;
-    const now = Date.now();
-    if (now - this._updateThrottle < 5000) return;
-    this._updateThrottle = now;
+  getTimerState() {
+    if (!this.available) return null;
     try {
-      const { TimerPlugin } = window.Capacitor.Plugins;
-      if (TimerPlugin) TimerPlugin.update({ time });
-    } catch {}
+      const raw = window.androidBridge.getTimerState();
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
   },
 
+  startUpTimer() {
+    if (!this.available) return;
+    try { window.androidBridge.startUpTimer(); } catch {}
+  },
+  startDownTimer(sec) {
+    if (!this.available) return;
+    try { window.androidBridge.startDownTimer(sec); } catch {}
+  },
+  pauseTimer() {
+    if (!this.available) return;
+    try { window.androidBridge.pauseTimer(); } catch {}
+  },
+  resumeTimer() {
+    if (!this.available) return;
+    try { window.androidBridge.resumeTimer(); } catch {}
+  },
   stopTimer() {
     if (!this.available) return;
-    try {
-      this._updateThrottle = 0;
-      const { TimerPlugin } = window.Capacitor.Plugins;
-      if (TimerPlugin) TimerPlugin.stop();
-    } catch {}
+    try { window.androidBridge.stopTimer(); } catch {}
   },
 
-  async requestPermission() {
-    if (!this.available) return true;
+  exportData(content, filename) {
+    if (!this.available) return false;
     try {
-      const { LocalNotifications } = window.Capacitor.Plugins;
-      const perm = await LocalNotifications.requestPermissions();
-      return perm.display === 'granted';
+      const result = window.androidBridge.exportData(content, filename);
+      const parsed = JSON.parse(result);
+      return parsed.success === true;
     } catch { return false; }
   },
 
-  async notifyTimerComplete(title, body) {
-    vibrate();
+  syncFromNative() {
     if (!this.available) return;
-    try {
-      const { LocalNotifications } = window.Capacitor.Plugins;
-      await LocalNotifications.schedule({
-        notifications: [{
-          title,
-          body,
-          id: Date.now() % 100000,
-          schedule: { at: new Date(Date.now() + 1000) },
-          smallIcon: 'ic_stat_tomato',
-          iconColor: '#E53935'
-        }]
-      });
-    } catch {}
+    const state = this.getTimerState();
+    if (!state) return;
+
+    if (state.completed) {
+      if (TimerDOWN.state === 'running' || TimerDOWN.state === 'paused') {
+        TimerDOWN._stopTick();
+        const total = TimerDOWN.total;
+        if (total > 0) {
+          const act = document.getElementById('cd-activity-input').value.trim() || ('倒计时 '+Math.round(total/60)+'分钟');
+          const now = Math.floor(Date.now()/1000);
+          DB.addRecord({id:Date.now(),date:today(),startTime:now-total,endTime:now,duration:total,activity:act});
+        }
+        TimerDOWN.state = 'finished';
+        vibrate();
+        TimerDOWN._syncUI();
+        showToast('倒计时完成！');
+        renderStats();
+      }
+      return;
+    }
+
+    if (state.type === 'down' && TimerDOWN.state === 'running') {
+      if (state.remaining !== undefined) {
+        TimerDOWN.remaining = Math.max(0, state.remaining);
+        TimerDOWN._updDisplay();
+      }
+    }
+    if (state.type === 'up' && TimerUP.state === 'running') {
+      if (state.elapsed !== undefined) {
+        TimerUP.accumulated = Math.max(TimerUP.accumulated, state.elapsed);
+        TimerUP.startTime = Date.now();
+        TimerUP._updDisplay();
+      }
+    }
   }
 };
 
@@ -151,9 +142,9 @@ const TimerUP = {
     this.saveTimer=setInterval(()=>this._save(),1000);
   },
 
-  start() { if(this.state!=='idle')return; this.state='running'; this.startTime=Date.now(); this.accumulated=0; this.activity=''; this._startTick(); this._syncUI(); const el=document.getElementById('up-activity-input'); el.value=''; el.focus(); this._save(); NativeBridge.startTimer('00:00:00'); },
-  pause() { if(this.state!=='running')return; this.accumulated+=(Date.now()-this.startTime)/1000; this.state='paused'; this.startTime=null; this._stopTick(); this.activity=document.getElementById('up-activity-input').value.trim(); this._syncUI(); this._save(); },
-  resume() { if(this.state!=='paused')return; this.state='running'; this.startTime=Date.now(); this._startTick(); this._syncUI(); this.activity=document.getElementById('up-activity-input').value.trim(); this._save(); NativeBridge.startTimer(fmtTimeDisplay(this._elapsed())); },
+  start() { if(this.state!=='idle')return; this.state='running'; this.startTime=Date.now(); this.accumulated=0; this.activity=''; this._startTick(); this._syncUI(); const el=document.getElementById('up-activity-input'); el.value=''; el.focus(); this._save(); NativeBridge.startUpTimer(); },
+  pause() { if(this.state!=='running')return; this.accumulated+=(Date.now()-this.startTime)/1000; this.state='paused'; this.startTime=null; this._stopTick(); this.activity=document.getElementById('up-activity-input').value.trim(); this._syncUI(); this._save(); NativeBridge.pauseTimer(); },
+  resume() { if(this.state!=='paused')return; this.state='running'; this.startTime=Date.now(); this._startTick(); this._syncUI(); this.activity=document.getElementById('up-activity-input').value.trim(); this._save(); NativeBridge.resumeTimer(); },
   stop() {
     if(this.state==='idle')return;
     if(this.state==='running'){this.accumulated+=(Date.now()-this.startTime)/1000;this._stopTick();}
@@ -167,7 +158,7 @@ const TimerUP = {
   _startTick() { this._stopTick(); this.tickId=setInterval(()=>this._updDisplay(),200); this._updDisplay(); },
   _stopTick() { if(this.tickId){clearInterval(this.tickId);this.tickId=null;} },
   _elapsed() { if(this.state==='running')return this.accumulated+(Date.now()-this.startTime)/1000; if(this.state==='paused')return this.accumulated; return 0; },
-  _updDisplay() { const t=fmtTimeDisplay(this._elapsed()); document.getElementById('up-time').textContent=t; NativeBridge.updateTimer(t); },
+  _updDisplay() { document.getElementById('up-time').textContent=fmtTimeDisplay(this._elapsed()); },
   _save() {
     const st=this.state==='idle'?null:{state:this.state,startTime:this.startTime,accumulated:this.state==='running'?this.accumulated+(Date.now()-this.startTime)/1000:this.accumulated,activity:document.getElementById('up-activity-input').value.trim()||this.activity};
     if(st)localStorage.setItem('tc_up_timer',JSON.stringify(st)); else localStorage.removeItem('tc_up_timer');
@@ -201,9 +192,9 @@ const TimerDOWN = {
     Knob._highlightPreset(this.remaining);
   },
 
-  start() { if(this.state!=='idle')return; this.remaining=this.total; this.state='running'; this._startTick(); this._syncUI(); const el=document.getElementById('cd-activity-input'); el.value=''; NativeBridge.startTimer(fmtCountdown(this.remaining)); },
-  pause() { if(this.state!=='running')return; this.state='paused'; this._stopTick(); this._syncUI(); this._save(); },
-  resume() { if(this.state!=='paused')return; this.state='running'; this._startTick(); this._syncUI(); NativeBridge.startTimer(fmtCountdown(this.remaining)); },
+  start() { if(this.state!=='idle')return; this.remaining=this.total; this.state='running'; this._startTick(); this._syncUI(); const el=document.getElementById('cd-activity-input'); el.value=''; NativeBridge.startDownTimer(this.total); },
+  pause() { if(this.state!=='running')return; this.state='paused'; this._stopTick(); this._syncUI(); this._save(); NativeBridge.pauseTimer(); },
+  resume() { if(this.state!=='paused')return; this.state='running'; this._startTick(); this._syncUI(); NativeBridge.resumeTimer(); },
   stop() {
     if(this.state!=='running'&&this.state!=='paused')return;
     this._stopTick();
@@ -223,16 +214,13 @@ const TimerDOWN = {
     if(this.state!=='idle')return;
     this.total=Math.max(60,Math.min(2700,Math.round(s)));
     this.remaining=this.total;
-    Knob.setArc(this.remaining);
-    this._updDisplay();
+    Knob.setArc(this.remaining); this._updDisplay();
     Knob._highlightPreset(this.remaining);
   },
 
   _tick() {
     this.remaining=Math.max(0,this.remaining-1);
-    Knob.setArc(this.remaining);
-    this._updDisplay();
-    this._save();
+    Knob.setArc(this.remaining); this._updDisplay(); this._save();
     if(this.remaining<=0){
       this._stopTick();
       const act=document.getElementById('cd-activity-input').value.trim()||('倒计时 '+Math.round(this.total/60)+'分钟');
@@ -240,7 +228,6 @@ const TimerDOWN = {
       DB.addRecord({id:Date.now(),date:today(),startTime:now-this.total,endTime:now,duration:this.total,activity:act});
       this.state='finished';vibrate();this._syncUI();showToast('倒计时完成！');renderStats();
       NativeBridge.stopTimer();
-      NativeBridge.notifyTimerComplete('番茄钟', '倒计时完成！'+act);
     }
   },
   _startTick() { this._stopTick(); this.tickId=setInterval(()=>this._tick(),1000); this._tick(); },
@@ -250,37 +237,28 @@ const TimerDOWN = {
     else{localStorage.removeItem('tc_down_timer');}
   },
   _loadState() { try{const d=localStorage.getItem('tc_down_timer');return d?JSON.parse(d):null}catch{return null} },
-  _updDisplay() { const t=fmtCountdown(this.remaining); document.getElementById('knob-time').textContent=t; NativeBridge.updateTimer(t); },
+  _updDisplay() { document.getElementById('knob-time').textContent=fmtCountdown(this.remaining); },
   _syncUI() {
     const r=this.state==='running', p=this.state==='paused', i=this.state==='idle', f=this.state==='finished';
     const s=(id)=>document.getElementById(id);
-    s('cd-start').style.display=i?'':'none';
-    s('cd-pause').style.display=r?'':'none';
-    s('cd-resume').style.display=p?'':'none';
-    s('cd-stop').style.display=(r||p)?'':'none';
+    s('cd-start').style.display=i?'':'none'; s('cd-pause').style.display=r?'':'none';
+    s('cd-resume').style.display=p?'':'none'; s('cd-stop').style.display=(r||p)?'':'none';
     s('cd-reset').style.display=(r||p||f)?'':'none';
-    const status=s('cd-status');
-    status.textContent=i?'就绪':(r?'倒计时中':(p?'已暂停':'时间到！'));
-    status.className='knob-status'+(f?' finished':'');
-    Knob._setEditable(i);
-    document.querySelectorAll('.preset-btn').forEach(b=>b.style.pointerEvents=i?'':'none');
-    const act=s('cd-activity');
-    if(!i&&!f)act.style.display='';else act.style.display='none';
+    const st=s('cd-status');
+    st.textContent=i?'就绪':(r?'倒计时中':(p?'已暂停':'时间到！')); st.className='knob-status'+(f?' finished':'');
+    Knob._setEditable(i); document.querySelectorAll('.preset-btn').forEach(b=>b.style.pointerEvents=i?'':'none');
+    const act=s('cd-activity'); if(!i&&!f)act.style.display=''; else act.style.display='none';
   }
 };
 
 /* ============================== Knob ============================== */
 const Knob = {
   _isDragging:false,
-
   init() {
     const el=document.getElementById('knob');
     el.addEventListener('pointerdown',e=>{if(TimerDOWN.state!=='idle')return;this._isDragging=true;el.setPointerCapture(e.pointerId);this._updateFromEvent(e);});
     el.addEventListener('pointermove',e=>{if(!this._isDragging)return;e.preventDefault();this._updateFromEvent(e);});
-    el.addEventListener('pointerup',()=>{this._isDragging=false;});
-    el.addEventListener('pointercancel',()=>{this._isDragging=false;});
-
-    // Manual input
+    el.addEventListener('pointerup',()=>{this._isDragging=false;}); el.addEventListener('pointercancel',()=>{this._isDragging=false;});
     document.getElementById('knob-time').addEventListener('click',()=>{
       if(TimerDOWN.state!=='idle')return;
       document.getElementById('knob-time').style.display='none';
@@ -289,107 +267,48 @@ const Knob = {
     });
     document.getElementById('knob-input').addEventListener('blur',()=>Knob._confirmInput());
     document.getElementById('knob-input').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();Knob._confirmInput();}});
-
-    // Presets
-    document.querySelectorAll('.preset-btn').forEach(btn=>{
-      btn.addEventListener('click',()=>{
-        if(TimerDOWN.state!=='idle')return;
-        TimerDOWN.setTime(parseInt(btn.dataset.minutes)*60);
-      });
-    });
-
-    // Initial arc
-    this.setArc(1500);
-    this._highlightPreset(1500);
+    document.querySelectorAll('.preset-btn').forEach(btn=>{btn.addEventListener('click',()=>{if(TimerDOWN.state!=='idle')return;TimerDOWN.setTime(parseInt(btn.dataset.minutes)*60);});});
+    this.setArc(1500); this._highlightPreset(1500);
   },
-
   _updateFromEvent(e) {
     const rect=document.getElementById('knob').getBoundingClientRect();
     const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
     const dx=e.clientX-cx, dy=e.clientY-cy;
-    let angle=Math.atan2(dy,dx)*180/Math.PI;
-    angle=((angle+90)%360+360)%360; // 0° at top, clockwise
-    const sec=Math.round(angle/360*2700);
-    TimerDOWN.setTime(sec);
+    let angle=Math.atan2(dy,dx)*180/Math.PI; angle=((angle+90)%360+360)%360;
+    TimerDOWN.setTime(Math.round(angle/360*2700));
   },
-
   setArc(rem) {
-    // idle → proportion of max (45min=2700s); running/paused → proportion of set total
     const total=TimerDOWN.state==='idle'?2700:TimerDOWN.total;
     const frac=Math.min(1,Math.max(0,total>0?rem/total:0));
     this._updateArc(534.07*(1-frac));
   },
-
-  _updateArc(offset) {
-    document.getElementById('knob-arc').setAttribute('stroke-dashoffset',offset);
-  },
-
-  _setEditable(editable) {
-    document.getElementById('knob-time').style.display=editable?'':'none';
-    document.getElementById('knob-edit').style.display='none';
-    document.querySelector('#knob .knob-label').textContent=editable?'触摸旋转或点击时间设定':'';
-  },
-
-  _highlightPreset(seconds) {
-    const min=Math.round(seconds/60);
-    document.querySelectorAll('.preset-btn').forEach(b=>{
-      b.classList.toggle('active',parseInt(b.dataset.minutes)===min);
-    });
-  },
-
-  _confirmInput() {
-    const inp=document.getElementById('knob-input');
-    const min=Math.max(1,Math.min(45,parseInt(inp.value)||25));
-    document.getElementById('knob-time').style.display='';
-    document.getElementById('knob-edit').style.display='none';
-    TimerDOWN.setTime(min*60);
-  }
+  _updateArc(offset) { document.getElementById('knob-arc').setAttribute('stroke-dashoffset',offset); },
+  _setEditable(e) { document.getElementById('knob-time').style.display=e?'':'none'; document.getElementById('knob-edit').style.display='none'; document.querySelector('#knob .knob-label').textContent=e?'触摸旋转或点击时间设定':''; },
+  _highlightPreset(sec) { const m=Math.round(sec/60); document.querySelectorAll('.preset-btn').forEach(b=>b.classList.toggle('active',parseInt(b.dataset.minutes)===m)); },
+  _confirmInput() { const inp=document.getElementById('knob-input'); const min=Math.max(1,Math.min(45,parseInt(inp.value)||25)); document.getElementById('knob-time').style.display=''; document.getElementById('knob-edit').style.display='none'; TimerDOWN.setTime(min*60); }
 };
 
 /* ============================== Stats ============================== */
 function renderStats() {
   const {count,totalMinutes,records}=DB.getStats(today());
-  document.getElementById('today-count').textContent=count;
-  document.getElementById('today-duration').textContent=totalMinutes;
+  document.getElementById('today-count').textContent=count; document.getElementById('today-duration').textContent=totalMinutes;
   const list=document.getElementById('records-list');
   if(!records.length){list.innerHTML='<div class="empty-state">还没有计时记录</div>';return;}
-  list.innerHTML=records.map(r=>{
-    const st=r.startTime,et=r.endTime||st+r.duration;
-    return '<div class="record-item"><div class="left"><div class="time">'+fmtClockTime(st)+' - '+fmtClockTime(et)+'</div><div class="activity-text">'+esc(r.activity||'未记录')+'</div></div><div class="duration">'+fmtDuration(r.duration)+'</div><button class="delete-btn" data-action="del-rec" data-id="'+r.id+'">✕</button></div>';
-  }).join('');
+  list.innerHTML=records.map(r=>{const st=r.startTime,et=r.endTime||st+r.duration;return '<div class="record-item"><div class="left"><div class="time">'+fmtClockTime(st)+' - '+fmtClockTime(et)+'</div><div class="activity-text">'+esc(r.activity||'未记录')+'</div></div><div class="duration">'+fmtDuration(r.duration)+'</div><button class="delete-btn" data-action="del-rec" data-id="'+r.id+'">✕</button></div>';}).join('');
 }
 
-/* ============================== Todos (date-aware) ============================== */
-function renderTodosFor(date, listId, inputId, addBtnId, dateLabelId, journalId) {
-  const todos=DB.getTodos(date);
-  const list=document.getElementById(listId);
+/* ============================== Todos ============================== */
+function renderTodosFor(date,listId,inputId,addBtnId,dateLabelId,journalId) {
+  const todos=DB.getTodos(date); const list=document.getElementById(listId);
   if(dateLabelId) document.getElementById(dateLabelId).textContent=date;
   document.getElementById(journalId).value=DB.getJournal(date);
   if(!todos.length){list.innerHTML='<div class="empty-state">还没有待办事项</div>';return;}
   list.innerHTML=todos.map((t,i)=>'<li class="todo-item" data-date="'+date+'" data-index="'+i+'"><div class="checkbox'+(t.done?' done':'')+'" data-action="toggle"></div><span class="todo-text'+(t.done?' done':'')+'">'+esc(t.text)+'</span><button class="delete-btn" data-action="delete">✕</button></li>').join('');
 }
-
-function addTodoFor(date, inputId, listId, journalId) {
-  const input=document.getElementById(inputId);
-  const text=input.value.trim(); if(!text)return;
-  const todos=DB.getTodos(date); todos.push({text,done:false}); DB.saveTodos(date,todos);
-  input.value=''; renderTodosFor(date,listId,inputId,null,null,journalId);
-}
-
-function toggleTodoFor(date,index,listId,inputId,journalId) {
-  const todos=DB.getTodos(date);
-  if(todos[index]){todos[index].done=!todos[index].done;DB.saveTodos(date,todos);renderTodosFor(date,listId,inputId,null,null,journalId);}
-}
-
-function deleteTodoFor(date,index,listId,inputId,journalId) {
-  let todos=DB.getTodos(date);
-  todos=todos.filter((_,i)=>i!==index); DB.saveTodos(date,todos);
-  renderTodosFor(date,listId,inputId,null,null,journalId);
-}
-
-function saveJournalFor(date, journalId) {
-  DB.saveJournal(date,document.getElementById(journalId).value);
-}
+function addTodoFor(date,inputId,listId,journalId){const inp=document.getElementById(inputId);const t=inp.value.trim();if(!t)return;const todos=DB.getTodos(date);todos.push({text:t,done:false});DB.saveTodos(date,todos);inp.value='';renderTodosFor(date,listId,inputId,null,null,journalId);}
+function toggleTodoFor(date,idx,listId,inputId,journalId){const todos=DB.getTodos(date);if(todos[idx]){todos[idx].done=!todos[idx].done;DB.saveTodos(date,todos);renderTodosFor(date,listId,inputId,null,null,journalId);}}
+function deleteTodoFor(date,idx,listId,inputId,journalId){let todos=DB.getTodos(date);todos=todos.filter((_,i)=>i!==idx);DB.saveTodos(date,todos);renderTodosFor(date,listId,inputId,null,null,journalId);}
+function saveJournalFor(date,journalId){DB.saveJournal(date,document.getElementById(journalId).value);}
 
 /* ============================== Calendar ============================== */
 const Calendar={
@@ -405,37 +324,19 @@ const Calendar={
     const t=today();
     let html='';
     for(let i=0;i<startDay;i++)html+='<div class="cal-day empty"></div>';
-    for(let d=1;d<=daysInMonth;d++){
-      const ds=prefix+'-'+String(d).padStart(2,'0');
-      const cls='cal-day'+(ds===t?' today':'')+(hasRecord.has(ds)?' has-record':'')+(ds===this.selected?' selected':'');
-      html+='<div class="'+cls+'" data-date="'+ds+'">'+d+'</div>';
-    }
+    for(let d=1;d<=daysInMonth;d++){const ds=prefix+'-'+String(d).padStart(2,'0');const cls='cal-day'+(ds===t?' today':'')+(hasRecord.has(ds)?' has-record':'')+(ds===this.selected?' selected':'');html+='<div class="'+cls+'" data-date="'+ds+'">'+d+'</div>';}
     document.getElementById('cal-grid').innerHTML=html;
     document.getElementById('cal-title').textContent=this.year+'年'+(this.month+1)+'月';
-    // Click days
-    document.querySelectorAll('.cal-day:not(.empty)').forEach(el=>{
-      el.addEventListener('click',()=>{
-        this.selected=el.dataset.date;
-        this.render();
-      });
-    });
+    document.querySelectorAll('.cal-day:not(.empty)').forEach(el=>{el.addEventListener('click',()=>{this.selected=el.dataset.date;this.render();});});
   },
   _renderDetail(ds){
     const el=document.getElementById('cal-detail');
-    const records=DB.getRecordsByDate(ds);
-    const journal=DB.getJournal(ds);
+    const records=DB.getRecordsByDate(ds); const journal=DB.getJournal(ds);
     const totalMin=Math.round(records.reduce((s,r)=>s+r.duration,0)/60);
     let html='<div class="cal-date">📅 '+ds+'</div>';
     if(records.length)html+='<div class="cal-summary">计时 '+records.length+' 次，共 '+totalMin+' 分钟</div>';
     if(!records.length&&!journal){html+='<div class="empty-state">这一天还没有记录</div>';el.innerHTML=html;return;}
-    if(records.length){
-      html+='<div style="margin-top:4px">';
-      records.forEach(r=>{
-        const st=r.startTime,et=r.endTime||st+r.duration;
-        html+='<div class="record-item" style="margin-bottom:4px"><div class="left"><div class="time">'+fmtClockTime(st)+' - '+fmtClockTime(et)+'</div><div class="activity-text">'+esc(r.activity||'未记录')+'</div></div><div class="duration">'+fmtDuration(r.duration)+'</div><button class="delete-btn" data-action="del-rec" data-id="'+r.id+'">✕</button></div>';
-      });
-      html+='</div>';
-    }
+    if(records.length){html+='<div style="margin-top:4px">';records.forEach(r=>{const st=r.startTime,et=r.endTime||st+r.duration;html+='<div class="record-item" style="margin-bottom:4px"><div class="left"><div class="time">'+fmtClockTime(st)+' - '+fmtClockTime(et)+'</div><div class="activity-text">'+esc(r.activity||'未记录')+'</div></div><div class="duration">'+fmtDuration(r.duration)+'</div><button class="delete-btn" data-action="del-rec" data-id="'+r.id+'">✕</button></div>';});html+='</div>';}
     if(journal){html+='<div class="journal-section" style="margin-top:4px"><label>📝 日志</label><div style="font-size:13px;color:var(--text);line-height:1.6;white-space:pre-wrap;user-select:text">'+esc(journal)+'</div></div>';}
     el.innerHTML=html;
   },
@@ -446,58 +347,50 @@ const Calendar={
 /* ============================== System Tab ============================== */
 function exportData() {
   Log.add('数据已导出');
-  const data = {};
-  let count = 0;
+  const data = {}; let count = 0;
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (key.startsWith('tc_')) {
-      try { data[key] = JSON.parse(localStorage.getItem(key)); count++; } catch {}
-    }
+    if (key.startsWith('tc_')) { try { data[key] = JSON.parse(localStorage.getItem(key)); count++; } catch {} }
   }
-  const blob = new Blob(
-    [JSON.stringify({ version: 1, exportedAt: Date.now(), data }, null, 2)],
-    { type: 'application/json' }
-  );
+  const json = JSON.stringify({ version: 1, exportedAt: Date.now(), data }, null, 2);
+  const filename = 'tomato-clock-' + today() + '.json';
+
+  if (NativeBridge.available) {
+    const ok = NativeBridge.exportData(json, filename);
+    if (ok) {
+      showToast('备份已保存到「下载」文件夹');
+    } else {
+      showToast('导出失败');
+    }
+    return;
+  }
+  // Fallback for browser: blob download
+  const blob = new Blob([json], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'tomato-clock-' + today() + '.json';
-  a.click();
+  const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
   showToast('数据已导出');
 }
 
 function importData() {
   const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.json';
-  input.onchange = function (e) {
-    const file = e.target.files[0];
-    if (!file) return;
+  input.type = 'file'; input.accept = '.json';
+  input.onchange = function(e) {
+    const file = e.target.files[0]; if(!file)return;
     const reader = new FileReader();
-    reader.onload = function (ev) {
+    reader.onload = function(ev) {
       try {
         const pkg = JSON.parse(ev.target.result);
-        if (!pkg.data || !pkg.version) return showToast('无效的备份文件');
-        if (!confirm('导入将覆盖所有本地数据。确认继续？')) return;
-        for (const key of Object.keys(pkg.data)) {
-          localStorage.setItem(key, JSON.stringify(pkg.data[key]));
-        }
-        if (TimerUP.tickId) TimerUP._stopTick();
-        if (TimerUP.saveTimer) clearInterval(TimerUP.saveTimer);
-        TimerUP._reset();
-        TimerUP._save();
-        NativeBridge.stopTimer();
-        if (TimerDOWN.tickId) TimerDOWN._stopTick();
-        TimerDOWN.state = 'idle';
-        TimerDOWN.remaining = TimerDOWN.total;
-        TimerDOWN._save();
-        NativeBridge.stopTimer();
-        Knob.setArc(TimerDOWN.remaining);
-        TimerDOWN._syncUI();
-        Calendar.init();
-        Log.add('数据已导入（' + Object.keys(pkg.data).length + ' 个表）');
-        showToast('数据导入成功');
+        if(!pkg.data || !pkg.version) return showToast('无效的备份文件');
+        if(!confirm('导入将覆盖所有本地数据。确认继续？')) return;
+        for(const key of Object.keys(pkg.data)) localStorage.setItem(key, JSON.stringify(pkg.data[key]));
+        if(TimerUP.tickId) TimerUP._stopTick();
+        if(TimerUP.saveTimer) clearInterval(TimerUP.saveTimer);
+        TimerUP._reset(); TimerUP._save(); NativeBridge.stopTimer();
+        if(TimerDOWN.tickId) TimerDOWN._stopTick();
+        TimerDOWN.state='idle'; TimerDOWN.remaining=TimerDOWN.total; TimerDOWN._save(); NativeBridge.stopTimer();
+        Knob.setArc(TimerDOWN.remaining); TimerDOWN._syncUI();
+        Calendar.init(); Log.add('数据已导入（'+Object.keys(pkg.data).length+' 个表）'); showToast('数据导入成功');
         switchTab(currentTab);
       } catch { showToast('文件格式错误'); }
     };
@@ -508,161 +401,85 @@ function importData() {
 
 function renderSystemTab() {
   renderStorageInfo();
-  const logs = Log.getAll();
-  const list = document.getElementById('system-log-list');
-  if (!logs.length) {
-    list.innerHTML = '<div class="empty-state">暂无系统日志</div>';
-    return;
-  }
-  list.innerHTML = logs.map(l => {
-    const d = new Date(l.time);
-    const t = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-    return '<div class="log-item"><span class="log-time">' + t + '</span><span class="log-msg">' + esc(l.msg) + '</span></div>';
-  }).join('');
+  const logs = Log.getAll(); const list = document.getElementById('system-log-list');
+  if (!logs.length) { list.innerHTML = '<div class="empty-state">暂无系统日志</div>'; return; }
+  list.innerHTML = logs.map(l => { const d=new Date(l.time); const t=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); return '<div class="log-item"><span class="log-time">'+t+'</span><span class="log-msg">'+esc(l.msg)+'</span></div>'; }).join('');
 }
-
 function renderStorageInfo() {
-  const el = document.getElementById('storage-info');
-  let bytes = 0;
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k.startsWith('tc_')) bytes += k.length + (localStorage.getItem(k) || '').length;
-  }
-  const records = DB.getRecords().length;
-  const raw = DB._get('todos', {});
-  const todos = Object.values(raw).reduce((s, a) => s + a.length, 0);
-  const logs = Log.getAll();
-  const lastExport = logs.find(l => l.msg.includes('已导出'));
-  const lastImport = logs.find(l => l.msg.includes('已导入'));
-  let backup = '从未';
-  if (lastExport) { const d = new Date(lastExport.time); backup = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-  else if (lastImport) { const d = new Date(lastImport.time); backup = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'（导入）'; }
-
-  el.innerHTML =
-    '<div class="storage-row"><span class="label">存储位置</span><span class="value">手机本地</span></div>' +
-    '<div class="storage-row"><span class="label">防清除保护</span><span class="value" id="persist-status">检测中...</span></div>' +
-    '<div class="storage-row"><span class="label">数据大小</span><span class="value">'+(bytes/1024).toFixed(1)+' KB</span></div>' +
-    '<div class="storage-row"><span class="label">计时记录</span><span class="value">'+records+' 条</span></div>' +
-    '<div class="storage-row"><span class="label">待办事项</span><span class="value">'+todos+' 项</span></div>' +
-    '<div class="storage-row"><span class="label">上次备份</span><span class="value">'+backup+'</span></div>';
-
-  if (navigator.storage && typeof navigator.storage.persisted === 'function') {
-    navigator.storage.persisted().then(granted => {
-      document.getElementById('persist-status').textContent = granted ? '已启用' : '未启用';
-    }).catch(() => {
-      document.getElementById('persist-status').textContent = '未知';
-    });
-  } else {
-    document.getElementById('persist-status').textContent = '不支持';
-  }
+  const el=document.getElementById('storage-info'); let bytes=0;
+  for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('tc_'))bytes+=k.length+(localStorage.getItem(k)||'').length;}
+  const records=DB.getRecords().length; const raw=DB._get('todos',{}); const todos=Object.values(raw).reduce((s,a)=>s+a.length,0);
+  const logs=Log.getAll(); const lastExport=logs.find(l=>l.msg.includes('已导出'));
+  const lastImport=logs.find(l=>l.msg.includes('已导入')); let backup='从未';
+  if(lastExport){const d=new Date(lastExport.time);backup=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  else if(lastImport){const d=new Date(lastImport.time);backup=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'（导入）';}
+  el.innerHTML='<div class="storage-row"><span class="label">存储位置</span><span class="value">手机本地</span></div><div class="storage-row"><span class="label">防清除保护</span><span class="value" id="persist-status">检测中...</span></div><div class="storage-row"><span class="label">数据大小</span><span class="value">'+(bytes/1024).toFixed(1)+' KB</span></div><div class="storage-row"><span class="label">计时记录</span><span class="value">'+records+' 条</span></div><div class="storage-row"><span class="label">待办事项</span><span class="value">'+todos+' 项</span></div><div class="storage-row"><span class="label">上次备份</span><span class="value">'+backup+'</span></div>';
+  if (navigator.storage&&typeof navigator.storage.persisted==='function'){navigator.storage.persisted().then(g=>{document.getElementById('persist-status').textContent=g?'已启用':'未启用';}).catch(()=>{document.getElementById('persist-status').textContent='未知';});}else{document.getElementById('persist-status').textContent='不支持';}
 }
 
 /* ============================== Tab ============================== */
 let currentTab='timer';
-
 function switchTab(tab) {
   currentTab=tab;
   document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(e=>e.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   document.querySelector('.tab-btn[data-tab="'+tab+'"]').classList.add('active');
-  if(tab==='timer'){renderStats();}
-  if(tab==='today'){renderTodosFor(today(),'today-list','today-input','today-add','today-date','today-journal');}
-  if(tab==='tomorrow'){renderTodosFor(tomorrow(),'tomorrow-list','tomorrow-input','tomorrow-add','tomorrow-date','tomorrow-journal');}
-  if(tab==='calendar'){Calendar.render();}
-  if(tab==='system'){renderSystemTab();}
+  if(tab==='timer')renderStats();
+  if(tab==='today')renderTodosFor(today(),'today-list','today-input','today-add','today-date','today-journal');
+  if(tab==='tomorrow')renderTodosFor(tomorrow(),'tomorrow-list','tomorrow-input','tomorrow-add','tomorrow-date','tomorrow-journal');
+  if(tab==='calendar')Calendar.render();
+  if(tab==='system')renderSystemTab();
 }
 
 /* ============================== Init ============================== */
 document.addEventListener('DOMContentLoaded',()=>{
-  // Tab switcher
   document.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>switchTab(btn.dataset.tab)));
+  document.querySelectorAll('.mode-btn').forEach(btn=>{btn.addEventListener('click',()=>{
+    if(btn.dataset.mode==='down'&&TimerUP.state!=='idle'){showToast('请先停止正向计时');return;}
+    if(btn.dataset.mode==='up'&&TimerDOWN.state!=='idle'){showToast('请先停止倒计时');return;}
+    document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+    document.querySelectorAll('.timer-mode').forEach(m=>m.classList.remove('active')); document.getElementById('mode-'+btn.dataset.mode).classList.add('active');
+  });});
 
-  // Mode toggle
-  document.querySelectorAll('.mode-btn').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      if(btn.dataset.mode==='down'&&TimerUP.state!=='idle'){showToast('请先停止正向计时');return;}
-      if(btn.dataset.mode==='up'&&TimerDOWN.state!=='idle'){showToast('请先停止倒计时');return;}
-      document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
-      btn.classList.add('active');
-      document.querySelectorAll('.timer-mode').forEach(m=>m.classList.remove('active'));
-      document.getElementById('mode-'+btn.dataset.mode).classList.add('active');
-    });
-  });
-
-  // Timer UP controls
-  document.getElementById('up-controls').addEventListener('click',e=>{
-    const b=e.target.closest('button'); if(!b)return;
-    const a=b.dataset.action;
-    if(a==='start')TimerUP.start();else if(a==='pause')TimerUP.pause();else if(a==='resume')TimerUP.resume();else if(a==='stop')TimerUP.stop();else if(a==='reset')TimerUP.reset();
-  });
+  document.getElementById('up-controls').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const a=b.dataset.action;if(a==='start')TimerUP.start();else if(a==='pause')TimerUP.pause();else if(a==='resume')TimerUP.resume();else if(a==='stop')TimerUP.stop();else if(a==='reset')TimerUP.reset();});
   document.getElementById('up-activity-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();TimerUP.stop();}});
-
-  // Timer DOWN controls
-  document.getElementById('cd-controls').addEventListener('click',e=>{
-    const b=e.target.closest('button');if(!b)return;
-    const a=b.dataset.action;
-    if(a==='start')TimerDOWN.start();else if(a==='pause')TimerDOWN.pause();else if(a==='resume')TimerDOWN.resume();else if(a==='stop')TimerDOWN.stop();else if(a==='reset')TimerDOWN.reset();
-  });
+  document.getElementById('cd-controls').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const a=b.dataset.action;if(a==='start')TimerDOWN.start();else if(a==='pause')TimerDOWN.pause();else if(a==='resume')TimerDOWN.resume();else if(a==='stop')TimerDOWN.stop();else if(a==='reset')TimerDOWN.reset();});
   document.getElementById('cd-activity-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();TimerDOWN.stop();}});
 
-  // Today todos
   document.getElementById('today-add').addEventListener('click',()=>addTodoFor(today(),'today-input','today-list','today-journal'));
   document.getElementById('today-input').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addTodoFor(today(),'today-input','today-list','today-journal');}});
-  document.getElementById('today-list').addEventListener('click',e=>{
-    const item=e.target.closest('.todo-item');if(!item)return;
-    const i=parseInt(item.dataset.index),a=e.target.dataset.action,date=item.dataset.date;
-    if(a==='toggle')toggleTodoFor(date,i,'today-list','today-input','today-journal');
-    if(a==='delete')deleteTodoFor(date,i,'today-list','today-input','today-journal');
-  });
+  document.getElementById('today-list').addEventListener('click',e=>{const item=e.target.closest('.todo-item');if(!item)return;const i=parseInt(item.dataset.index),a=e.target.dataset.action,date=item.dataset.date;if(a==='toggle')toggleTodoFor(date,i,'today-list','today-input','today-journal');if(a==='delete')deleteTodoFor(date,i,'today-list','today-input','today-journal');});
   document.getElementById('today-journal').addEventListener('blur',()=>saveJournalFor(today(),'today-journal'));
-
-  // Tomorrow todos
   document.getElementById('tomorrow-add').addEventListener('click',()=>addTodoFor(tomorrow(),'tomorrow-input','tomorrow-list','tomorrow-journal'));
   document.getElementById('tomorrow-input').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addTodoFor(tomorrow(),'tomorrow-input','tomorrow-list','tomorrow-journal');}});
-  document.getElementById('tomorrow-list').addEventListener('click',e=>{
-    const item=e.target.closest('.todo-item');if(!item)return;
-    const i=parseInt(item.dataset.index),a=e.target.dataset.action,date=item.dataset.date;
-    if(a==='toggle')toggleTodoFor(date,i,'tomorrow-list','tomorrow-input','tomorrow-journal');
-    if(a==='delete')deleteTodoFor(date,i,'tomorrow-list','tomorrow-input','tomorrow-journal');
-  });
+  document.getElementById('tomorrow-list').addEventListener('click',e=>{const item=e.target.closest('.todo-item');if(!item)return;const i=parseInt(item.dataset.index),a=e.target.dataset.action,date=item.dataset.date;if(a==='toggle')toggleTodoFor(date,i,'tomorrow-list','tomorrow-input','tomorrow-journal');if(a==='delete')deleteTodoFor(date,i,'tomorrow-list','tomorrow-input','tomorrow-journal');});
   document.getElementById('tomorrow-journal').addEventListener('blur',()=>saveJournalFor(tomorrow(),'tomorrow-journal'));
 
-  // Record deletion (stats + calendar)
   document.getElementById('records-list').addEventListener('click',e=>{const b=e.target.closest('[data-action="del-rec"]');if(b&&confirm('删除这条记录？')){DB.deleteRecord(parseInt(b.dataset.id));renderStats();}});
   document.getElementById('cal-detail').addEventListener('click',e=>{const b=e.target.closest('[data-action="del-rec"]');if(b&&confirm('删除这条记录？')){DB.deleteRecord(parseInt(b.dataset.id));Calendar._renderDetail(Calendar.selected);}});
-
-  // Calendar nav
   document.getElementById('cal-prev').addEventListener('click',()=>Calendar.prevMonth());
   document.getElementById('cal-next').addEventListener('click',()=>Calendar.nextMonth());
-
-  // System tab
   document.getElementById('btn-export').addEventListener('click',exportData);
   document.getElementById('btn-import').addEventListener('click',importData);
 
-  // Init
-  TimerUP.init();
-  TimerDOWN.init();
-  Knob.init();
-  Calendar.init();
-
-  // 每日数据快照
+  TimerUP.init(); TimerDOWN.init(); Knob.init(); Calendar.init();
   Log.dataSnapshot();
 
-  // 请求通知权限（Android 13+）
-  NativeBridge.requestPermission();
+  // Sync timer state from native immediately (handles process-kill recovery)
+  if (NativeBridge.available) NativeBridge.syncFromNative();
 
-  // 请求持久化存储（防止浏览器自动清除）
+  // Sync timer state from native on app resume
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) NativeBridge.syncFromNative();
+  });
+
+  // Persistent storage (PWA mode)
   if (!NativeBridge.available && navigator.storage && navigator.storage.persist) {
-    navigator.storage.persist().then(granted => {
-      if (granted) Log.add('存储已设为持久保留');
-    });
+    navigator.storage.persist().then(granted => { if(granted) Log.add('存储已设为持久保留'); });
   }
 
-  // 渲染当前 Tab（计时页初始显示）
   renderStats();
-
-  // SW（仅浏览器环境）
   if (!NativeBridge.available && 'serviceWorker'in navigator) {
     navigator.serviceWorker.register('sw.js').catch(()=>{});
   }
