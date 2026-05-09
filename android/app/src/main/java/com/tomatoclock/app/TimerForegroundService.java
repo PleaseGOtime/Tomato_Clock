@@ -98,23 +98,30 @@ public class TimerForegroundService extends Service {
         PendingIntent pi = PendingIntent.getActivity(this, 0, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
+        // Full screen intent to wake screen on lock screen
+        Intent fullIntent = new Intent(this, MainActivity.class);
+        fullIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+        PendingIntent fullPi = PendingIntent.getActivity(this, 1, fullIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_COMPLETE)
-                .setContentTitle("倒计时完成")
+                .setContentTitle("⏰ 倒计时完成")
                 .setContentText("番茄钟倒计时结束了！")
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentIntent(pi)
+                .setFullScreenIntent(fullPi, true)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setAutoCancel(true)
-                .setDefaults(Notification.DEFAULT_ALL)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
+                .setVibrate(new long[]{0, 300, 200, 300, 200, 500})
                 .build();
 
         NotificationManager nm = getSystemService(NotificationManager.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
-                    == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                nm.notify(COMPLETE_NOTIFICATION_ID, notification);
-            }
-        } else {
+        try {
             nm.notify(COMPLETE_NOTIFICATION_ID, notification);
+        } catch (SecurityException ignored) {
+            // POST_NOTIFICATIONS not granted on TIRAMISU+
         }
     }
 
@@ -148,6 +155,11 @@ public class TimerForegroundService extends Service {
                     CHANNEL_COMPLETE, "计时完成", NotificationManager.IMPORTANCE_HIGH);
             complete.setDescription("倒计时结束时通知");
             complete.enableVibration(true);
+            complete.enableLights(true);
+            complete.setLightColor(0xFFE53935);
+            // Use default sound so it rings on all ROMs
+            complete.setSound(android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
+                    Notification.AUDIO_ATTRIBUTES_DEFAULT);
             nm.createNotificationChannel(complete);
         }
     }

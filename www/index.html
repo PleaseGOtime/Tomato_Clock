@@ -232,9 +232,35 @@
     .cal-day.has-record::after { content: ''; position: absolute; bottom: 3px; width: 4px; height: 4px; border-radius: 50%; background: var(--primary); }
     .cal-day.selected.has-record::after { background: #fff; }
     .cal-day:not(.empty):not(.selected):active { background: var(--border); }
-    #cal-detail { display: flex; flex-direction: column; gap: 8px; }
+    #cal-detail { display: flex; flex-direction: column; gap: 8px; min-height: 120px; justify-content: center; }
     #cal-detail .cal-date { font-size: 15px; font-weight: 600; }
     #cal-detail .cal-summary { font-size: 12px; color: var(--text2); }
+    #cal-title { cursor: pointer; padding: 4px 8px; border-radius: 6px; user-select: none; }
+    #cal-title:active { background: var(--border); }
+
+    /* Year/Month Picker */
+    .cal-picker-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 200;
+      background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center;
+    }
+    .cal-picker-panel {
+      background: var(--surface); border-radius: 16px; padding: 20px; width: 300px;
+      max-height: 70vh; box-shadow: 0 8px 32px rgba(0,0,0,.2);
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .cal-picker-years { display: flex; flex-wrap: wrap; gap: 4px; max-height: 100px; overflow-y: auto; padding: 4px 0; }
+    .cal-picker-years button {
+      border: none; background: none; font-size: 14px; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+    }
+    .cal-picker-years button:active { background: var(--border); }
+    .cal-picker-years button.active { background: var(--primary); color: #fff; }
+    .cal-picker-months { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; }
+    .cal-picker-months button {
+      border: 1px solid var(--border); background: var(--surface); font-size: 14px;
+      padding: 10px 0; border-radius: 8px; cursor: pointer;
+    }
+    .cal-picker-months button:active { background: var(--border); }
+    .cal-picker-months button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 
     /* Toast */
     .toast {

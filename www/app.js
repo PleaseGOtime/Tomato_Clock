@@ -105,7 +105,11 @@ const NativeBridge = {
           const now = Math.floor(Date.now()/1000);
           DB.addRecord({id:Date.now(),date:today(),startTime:now-total,endTime:now,duration:total,activity:act});
         }
+        // Reset display to zero
+        TimerDOWN.remaining = 0;
+        Knob.setArc(0);
         TimerDOWN.state = 'finished';
+        TimerDOWN._updDisplay();
         vibrate();
         TimerDOWN._syncUI();
         showToast('倒计时完成！');
@@ -219,6 +223,33 @@ const TimerDOWN = {
   },
 
   _tick() {
+    // Check native state first (corrects display after screen-off)
+    if (NativeBridge.available) {
+      const st = NativeBridge.getTimerState();
+      if (st && st.completed) {
+        this._stopTick();
+        const act=document.getElementById('cd-activity-input').value.trim()||('倒计时 '+Math.round(this.total/60)+'分钟');
+        const now=Math.floor(Date.now()/1000);
+        DB.addRecord({id:Date.now(),date:today(),startTime:now-this.total,endTime:now,duration:this.total,activity:act});
+        this.remaining=0; Knob.setArc(0); this.state='finished'; this._updDisplay(); vibrate(); this._syncUI(); showToast('倒计时完成！'); renderStats();
+        NativeBridge.stopTimer();
+        return;
+      }
+      if (st && st.type === 'down' && st.remaining !== undefined) {
+        this.remaining = Math.max(0, st.remaining);
+        Knob.setArc(this.remaining); this._updDisplay(); this._save();
+        if (this.remaining <= 0) {
+          this._stopTick();
+          const act=document.getElementById('cd-activity-input').value.trim()||('倒计时 '+Math.round(this.total/60)+'分钟');
+          const now=Math.floor(Date.now()/1000);
+          DB.addRecord({id:Date.now(),date:today(),startTime:now-this.total,endTime:now,duration:this.total,activity:act});
+          this.state='finished';vibrate();this._syncUI();showToast('倒计时完成！');renderStats();
+          NativeBridge.stopTimer();
+        }
+        return;
+      }
+    }
+    // Fallback: normal JS tick
     this.remaining=Math.max(0,this.remaining-1);
     Knob.setArc(this.remaining); this._updDisplay(); this._save();
     if(this.remaining<=0){
@@ -313,7 +344,7 @@ function saveJournalFor(date,journalId){DB.saveJournal(date,document.getElementB
 /* ============================== Calendar ============================== */
 const Calendar={
   year:0,month:0,selected:'',
-  init(){const d=new Date();this.year=d.getFullYear();this.month=d.getMonth();this.selected=today();this.render();},
+  init(){const d=new Date();this.year=d.getFullYear();this.month=d.getMonth();this.selected=today();document.getElementById('cal-title').addEventListener('click',()=>this._showPicker());this.render();},
   render(){this._renderMonth();this._renderDetail(this.selected);},
   _renderMonth(){
     const daysInMonth=new Date(this.year,this.month+1,0).getDate();
@@ -341,7 +372,41 @@ const Calendar={
     el.innerHTML=html;
   },
   prevMonth(){this.month--;if(this.month<0){this.month=11;this.year--;}this.selected='';this.render();},
-  nextMonth(){this.month++;if(this.month>11){this.month=0;this.year++;}this.selected='';this.render();}
+  nextMonth(){this.month++;if(this.month>11){this.month=0;this.year++;}this.selected='';this.render();},
+
+  _showPicker(){
+    if(this._pickerEl)return;
+    const overlay=document.createElement('div'); overlay.className='cal-picker-overlay';
+    overlay.addEventListener('click',e=>{if(e.target===overlay)this._hidePicker();});
+
+    // Year list (fixed wide range)
+    const now=new Date().getFullYear();
+    let yhtml='';
+    for(let yr=now-15;yr<=now+5;yr++)yhtml+='<button class="cal-picker-yr'+(yr===this.year?' active':'')+'" data-yr="'+yr+'">'+yr+'</button>';
+    // Month grid
+    let mhtml='';
+    for(let mo=1;mo<=12;mo++)mhtml+='<button class="cal-picker-mo'+(mo===this.month+1?' active':'')+'" data-mo="'+mo+'">'+mo+'月</button>';
+
+    overlay.innerHTML='<div class="cal-picker-panel"><div class="cal-picker-years">'+yhtml+'</div><div class="cal-picker-months">'+mhtml+'</div></div>';
+    document.body.appendChild(overlay); this._pickerEl=overlay;
+
+    // Year click → toggle active
+    overlay.querySelectorAll('.cal-picker-yr').forEach(b=>b.addEventListener('click',()=>{
+      overlay.querySelector('.cal-picker-yr.active')?.classList.remove('active');
+      b.classList.add('active');
+    }));
+    // Month click → jump and close
+    overlay.querySelectorAll('.cal-picker-mo').forEach(b=>b.addEventListener('click',()=>{
+      const newMo=parseInt(b.dataset.mo)-1;
+      const activeYr=overlay.querySelector('.cal-picker-yr.active');
+      if(activeYr)this.year=parseInt(activeYr.dataset.yr);
+      this.month=newMo; this.selected=''; this._hidePicker(); this.render();
+    }));
+  },
+
+  _hidePicker(){
+    if(this._pickerEl){this._pickerEl.remove();this._pickerEl=null;}
+  }
 };
 
 /* ============================== System Tab ============================== */
@@ -473,6 +538,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) NativeBridge.syncFromNative();
   });
+  window.addEventListener('focus', () => NativeBridge.syncFromNative());
 
   // Persistent storage (PWA mode)
   if (!NativeBridge.available && navigator.storage && navigator.storage.persist) {
